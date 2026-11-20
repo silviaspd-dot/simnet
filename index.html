@@ -337,7 +337,7 @@ function connectPorts(cable,a,b){
   if(!da||!db)return{ok:false,msg:'Perangkat tidak ditemukan.'};
   if(da.id===db.id)return{ok:false,msg:'Kabel tidak bisa menghubungkan perangkat ke dirinya sendiri.'};
   const pa=da.ports.find(p=>p.n===a.port),pb=db.ports.find(p=>p.n===b.port);
-  if(!pa||!pb)return{ok:false,msg:'Port tidak ada.'};
+  if(!pa||!pb)return{ok:false,msg:'Port tidak tersedia.'};
   const media=CABLES[cable].media;
   for(const [d,p] of [[da,pa],[db,pb]]){
     if(p.m!==media)return{ok:false,mistake:1,msg:CABLES[cable].label+' tidak cocok dengan '+short(p.n)+' di '+d.name+': itu '+MEDIA_NAME[p.m]+', sedangkan kabel ini untuk '+MEDIA_NAME[media]+'.'};
@@ -2195,7 +2195,7 @@ function asDone(){
   h+='<div class="row"><button class="btn pri" data-act="assavepdf">'+(sv.pdf?'✓ ':'')+'Simpan laporan PDF</button><button class="btn pri" data-act="assavejson">'+(sv.json?'✓ ':'')+'Simpan berkas proyek (JSON)</button></div>';
   h+='<p class="small" id="as-dlmsg" style="margin:8px 0 0"></p></div>';
   h+='<div class="card"><h3>Mengunggah ke Google Classroom</h3><ol class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>Simpan kedua berkas dengan tombol di atas.</li><li>Buka tugas asesmen di Google Classroom.</li><li>Pilih Tambahkan atau buat, lalu File, dan pilih kedua berkas.</li><li>Tekan Serahkan.</li></ol></div>';
-  h+='<div class="card"><h3>Rincian nilai otomatis</h3><table class="t">'+r.skor.kelompok.map(g=>'<tr><td>'+esc(g.label)+'</td><td style="text-align:right" class="mono">'+fmt1(g.poin)+' / '+g.maks+'</td></tr>').join('')+'</table></div>';
+  h+='<div class="card"><h3>Nilai Asesmen</h3><table class="t">'+r.skor.kelompok.map(g=>'<tr><td>'+esc(g.label)+'</td><td style="text-align:right" class="mono">'+fmt1(g.poin)+' / '+g.maks+'</td></tr>').join('')+'</table></div>';
   h+='<div class="row"><button class="btn sm bad" data-act="asredo">Ulangi asesmen</button></div>';
   return h;
 }
