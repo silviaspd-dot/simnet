@@ -1,4 +1,4 @@
-<title>SimNet</title>
+<title>Simulator Jaringan</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>
@@ -238,13 +238,16 @@ table.mt{min-width:860px}table.mt td.act{white-space:nowrap}table.mt .btn.sm{min
 @keyframes fireflick{0%{opacity:.95}17%{opacity:.7}33%{opacity:1}52%{opacity:.62}71%{opacity:.9}86%{opacity:.75}100%{opacity:.95}}
 @keyframes firewave{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.04);opacity:1}}
 @media(prefers-reduced-motion:reduce){#alarmfx,#alarmfx::before{animation:none}}
+#alarmfx.viol{opacity:1;box-shadow:inset 0 0 120px 36px rgba(230,0,20,.85),inset 0 0 40px 10px rgba(255,60,60,.8);animation:violflash .35s infinite steps(1,end)}
+@keyframes violflash{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){#alarmfx.viol{animation:none}}
 </style>
 <input type="file" id="as-file" accept=".json,application/json" hidden>
 <div id="app">
   <header class="top">
     <div class="brand">
       <svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true"><rect x="-15" y="-15" width="30" height="30" rx="7" fill="var(--accent)"/><g stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" fill="none"><path d="M-8 6V-4M0 6V-8M8 6V-1"/></g><g fill="var(--accent-ink)"><circle cx="-8" cy="-6" r="2.6"/><circle cx="0" cy="-10" r="2.6"/><circle cx="8" cy="-3" r="2.6"/></g></svg>
-      <div><h1>Simulator Jaringan TJKT</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
+      <div><h1>Simulator Jaringan</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
     </div>
     <span class="pill warn" id="as-badge" hidden></span>
     <span class="pill bad" id="net-badge" hidden>Terputus</span>
@@ -2600,9 +2603,9 @@ function asesInit(){
 }
 /* ================= MODE GURU: KENDALI PENUH DAN BATASAN MURID ================= */
 const GP_KEY='tjkt-guru-v1',GP_SALT='tjkt-guru-2026';
-const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5,pinv:0};
+const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5,alarmViol:true,pinv:0};
 const GP=Object.assign({},GP_DEF);
-let GP_PEND=null,PERAN='',PNAMA='';
+let GP_PEND=null,PERAN='',PNAMA='',PINDEF=false;
 function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(k==='pin')continue;else if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);GP.alarmMenit=clamp(+GP.alarmMenit||0,0,30)}
 function saveGP(){try{localStorage.setItem(GP_KEY,JSON.stringify(GP))}catch(e){}}
 const pinHash=p=>fnv(String(p)+'|'+GP_SALT);
@@ -2629,7 +2632,7 @@ async function gpSubmit(){
   const p=(($('#gp-pin')||{}).value||'').trim();
   if(!p){say('Masukkan PIN.');return}
   if(GP_BUSY)return;GP_BUSY=true;
-  try{await rpc('guru_login',{p_pin:p}).then(r=>{if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah')})}
+  try{await rpc('guru_login',{p_pin:p,p_dev:devId()}).then(r=>{if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah')})}
   catch(e){GP_BUSY=false;say(errMsg(e.message));return}
   GP_BUSY=false;
   const fn=GP_PEND;GP_PEND=null;closeDlg();if(fn)fn();
@@ -2639,7 +2642,7 @@ function needGuru(title,fn){
   pinDialog(title,'Tindakan ini hanya boleh dilakukan guru. Minta guru memasukkan PIN.',fn);
 }
 PA.rolebtn=()=>{};
-function exitGuru(){if(typeof monClose==='function')monClose();DBC.gkey='';PERAN='';PNAMA='';ADM.list=null;ADM.err='';showGate()}
+function exitGuru(){if(typeof monClose==='function')monClose();DBC.gkey='';PERAN='';PNAMA='';PINDEF=false;ADM.list=null;ADM.err='';showGate()}
 /* ---------- tindakan guru yang dibungkus PIN untuk murid ---------- */
 const _asabort=PA.asabort,_asredo=PA.asredo;
 PA.asabort=()=>{if(ROLE==='guru'||GP.allowAbort)_asabort();else needGuru('Batalkan asesmen',_asabort)};
@@ -2649,7 +2652,7 @@ PA.asforce=()=>{if(AS.phase!=='run')return;AS.agree=true;AS.confirmEmpty=true;PA
 PA.gpexit=exitGuru;
 PA.gpchpin=()=>{
   if(PERAN!=='admin'){toast('Hanya admin yang dapat mengganti PIN admin.','warn');return}
-  showDlg(dlgShell('Ganti PIN admin','<div class="fld"><label for="gp-old">PIN admin saat ini</label><input id="gp-old" type="password" autocomplete="off" inputmode="numeric"></div><div class="fld"><label for="gp-new">PIN baru (angka, 4 sampai 12 digit)</label><input id="gp-new" type="password" autocomplete="off" maxlength="12" inputmode="numeric"></div><p class="small muted">PIN baru berlaku di semua browser dan perangkat.</p><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpchg">Simpan PIN baru</button></div>'),true);
+  showDlg(dlgShell('Ganti PIN admin','<div class="fld"><label for="gp-old">PIN admin saat ini</label><input id="gp-old" type="password" autocomplete="off" inputmode="numeric"></div><div class="fld"><label for="gp-new">PIN baru (angka, 8 sampai 12 digit)</label><input id="gp-new" type="password" autocomplete="off" maxlength="12" inputmode="numeric"></div><p class="small muted">PIN baru berlaku di semua browser dan perangkat.</p><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpchg">Simpan PIN baru</button></div>'),true);
 };
 PA.gpcopy=()=>{const o=Object.assign({},GP);delete o.pin;showDlg(dlgShell('Salin pengaturan','<p class="small muted">Salin teks ini lalu tempel di Mode guru, bagian Pengaturan, pada komputer lain agar semua murid memakai aturan yang sama. PIN tidak ikut disalin.</p><textarea id="iotxt" rows="9" readonly>'+esc(JSON.stringify(o,null,1))+'</textarea>'),true)};
 PA.gpapply=()=>{
@@ -2667,7 +2670,7 @@ function panelGuru(){
   else h+='<p class="small muted">Belum ada asesmen berjalan. Murid mengisi identitas di tab Asesmen.</p>';
   h+='</div>';
   h+='<div class="card"><h3>Pengaturan asesmen</h3><div class="g2">'+gpFld('sekolah','Sekolah','text','maxlength="60"')+gpFld('mapel','Mata pelajaran','text','maxlength="60"')+'</div><div class="g2"><div class="fld"><label for="gpf-paket">Paket soal</label><select id="gpf-paket" data-ch="gp" data-k="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A: lab komputer'],['B','B: kabel dan nirkabel'],['C','C: dua gedung dan router'],['D','D: VLAN']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+gpFld('durasi','Durasi (menit)','number','min="30" max="180"')+'</div>'+gpFld('maxCek','Jumlah Cek mandiri','number','min="0" max="10"');
-  h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpFld('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number','min="0" max="30"')+'<button class="btn sm" data-act="alarmtest" style="margin-top:6px">Uji alarm (6 detik)</button>'+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
+  h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('alarmViol','Bunyikan alarm dan getar saat murid melanggar','Layar murid berkedip merah, ada sirene dan getar setiap pelanggaran dicatat.')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpFld('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number','min="0" max="30"')+'<button class="btn sm" data-act="alarmtest" style="margin-top:6px">Uji alarm (6 detik)</button>'+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
   h+='<p class="small muted" style="margin:10px 0 0">Selalu berlaku bagi murid: aktivitas latihan, template, diagnosa otomatis, pemuatan proyek, dan pengaturan dikunci saat asesmen berjalan. Paket, durasi, dan batasan hanya berlaku untuk asesmen yang dimulai setelah diubah.</p></div>';
   h+='<div class="card"><h3>Periksa hasil murid</h3><p class="small muted">Muat berkas JSON dari Google Classroom untuk menghitung ulang skor dan melihat jaringannya.</p><button class="btn sm pri" data-act="asverify">Periksa berkas siswa</button></div>';
   h+='<div class="card"><h3>Komputer lain</h3><p class="small muted">Pengaturan asesmen tersimpan per browser. Untuk sesi baru, pengaturan yang berlaku adalah yang Anda isi saat membuat sesi. Salin ke komputer lain jika ingin sama.</p><div class="row"><button class="btn sm" data-act="gpcopy">Salin pengaturan</button><button class="btn sm" data-act="gpapply">Terapkan pengaturan</button></div></div>';
@@ -2692,8 +2695,8 @@ function gpDialog(){
     if(g==='gpok')gpSubmit();
     else if(g==='gpchg'){
       const o=$('#gp-old').value,n=$('#gp-new').value,err=$('#gp-err');
-      if(!/^[0-9]{4,12}$/.test(n.trim())){err.textContent='PIN baru harus angka 4 sampai 12 digit.';return}
-      rpc('admin_pin_ganti',{p_key:gk(),p_lama:o,p_baru:n}).then(()=>{closeDlg();toast('PIN admin diganti. Berlaku di semua perangkat.','good')}).catch(x=>{err.textContent=errMsg(x.message)});
+      if(!/^[0-9]{8,12}$/.test(n.trim())){err.textContent='PIN baru harus angka 8 sampai 12 digit.';return}
+      rpc('admin_pin_ganti',{p_key:gk(),p_lama:o,p_baru:n}).then(()=>{PINDEF=false;closeDlg();toast('PIN admin diganti. Berlaku di semua perangkat.','good');if(ROLE==='guru')renderPanel()}).catch(x=>{err.textContent=errMsg(x.message)});
     }else if(g==='gpimp'){
       const err=$('#gp-err');let o;
       try{o=JSON.parse($('#gp-json').value)}catch(x){err.textContent='Teks bukan JSON yang valid.';return}
@@ -2706,18 +2709,18 @@ function gpDialog(){
   d.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='gp-pin'){e.preventDefault();gpSubmit()}});
 }
 /* ================= MESIN BASIS DATA SESI (mode lokal; cermin dari supabase_setup.sql) ================= */
-function cbtNewStore(){return{guru_key:'lokal',admin_pin_hash:null,gagal:0,kunci_sampai:0,guru:[],sesi:[],peserta:[]}}
+function cbtNewStore(){return{guru_key:'lokal',admin_pin_hash:null,gagal:0,kunci_sampai:0,dev:{},guru:[],sesi:[],peserta:[]}}
 function cbtEngine(S,fn,a,now,rid){
   a=a||{};
   const E=c=>{throw new Error(c)};
   const int=(v,d)=>/^-?[0-9]{1,6}$/.test(String(v))?parseInt(v,10):d;
   const ph=p=>{let h=2166136261;const t=String(p==null?'':p)+'|simnet-guru-2026';for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return 'h'+h.toString(16)};
-  if(!S.guru)S.guru=[];if(S.gagal==null){S.gagal=0;S.kunci_sampai=0}
+  if(!S.guru)S.guru=[];if(S.gagal==null){S.gagal=0;S.kunci_sampai=0}if(!S.dev)S.dev={};
   const adminH=()=>S.admin_pin_hash||ph('6978');
   const guru=()=>{const k=a.p_key;if(k==null||k==='')E('kunci_salah');if(k===S.guru_key)return;if(S.guru.some(g=>g.kunci===k&&g.aktif))return;E('kunci_salah')};
   const admin=()=>{if(a.p_key==null||a.p_key!==S.guru_key)E('bukan_admin')};
   const rnd=()=>id()+id();
-  const pinBaru=()=>{for(;;){const p=String(100000+Math.floor(Math.random()*900000));if(ph(p)===adminH()||S.guru.some(g=>g.pin_hash===ph(p)))continue;return p}};
+  const pinBaru=()=>{for(;;){const p=String(10000000+Math.floor(Math.random()*90000000));if(ph(p)===adminH()||S.guru.some(g=>g.pin_hash===ph(p)))continue;return p}};
   const sesiRow=s=>({id:s.id,token:s.token,judul:s.judul,status:s.status,policy:s.policy,dibuat:s.dibuat});
   const id=()=>rid();
   const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -2726,12 +2729,17 @@ function cbtEngine(S,fn,a,now,rid){
   case 'db_ping':return{ok:true,server_ms:now};
   case 'guru_cek':guru();return{ok:true,server_ms:now};
   case 'guru_login':{
+    const dv=String(a.p_dev==null||String(a.p_dev).trim()===''?'-':String(a.p_dev).trim()).slice(0,64);
     if(S.kunci_sampai>now)E('terlalu_banyak');
+    const lg=S.dev[dv];if(lg&&lg.sampai>now)E('terlalu_banyak');
     const h=ph(String(a.p_pin==null?'':a.p_pin).trim());
-    if(h===adminH()){S.gagal=0;return{ok:true,peran:'admin',nama:'Admin',key:S.guru_key,server_ms:now}}
+    if(h===adminH()){S.gagal=0;delete S.dev[dv];return{ok:true,peran:'admin',nama:'Admin',key:S.guru_key,server_ms:now,pin_default:!S.admin_pin_hash}}
     const g=S.guru.find(x=>x.pin_hash===h&&x.aktif);
-    if(g){S.gagal=0;g.terakhir=now;return{ok:true,peran:'guru',nama:g.nama,key:g.kunci,server_ms:now}}
-    if(S.gagal+1>=8){S.gagal=0;S.kunci_sampai=now+30000}else S.gagal++;
+    if(g){S.gagal=0;delete S.dev[dv];g.terakhir=now;return{ok:true,peran:'guru',nama:g.nama,key:g.kunci,server_ms:now}}
+    for(const k of Object.keys(S.dev))if(S.dev[k].terakhir<now-86400000)delete S.dev[k];
+    const d=S.dev[dv]=S.dev[dv]||{gagal:0,sampai:0,terakhir:now};d.gagal++;d.terakhir=now;
+    if(d.gagal>=5){d.gagal=0;d.sampai=now+60000}
+    if(S.gagal+1>=30){S.gagal=0;S.kunci_sampai=now+30000}else S.gagal++;
     return{ok:false,galat:'pin_salah'}}
   case 'admin_guru_daftar':admin();return S.guru.slice().sort((x,y)=>x.dibuat-y.dibuat).map(g=>({id:g.id,nama:g.nama,aktif:g.aktif,dibuat:g.dibuat,terakhir:g.terakhir}));
   case 'admin_guru_buat':{admin();const nm=String(a.p_nama==null?'':a.p_nama).trim();if(nm.length<3||nm.length>60)E('nama_tidak_valid');
@@ -2740,7 +2748,7 @@ function cbtEngine(S,fn,a,now,rid){
   case 'admin_guru_ubah':{admin();const g=S.guru.find(x=>x.id===a.p_id);if(!g)E('guru_tidak_ada');if(a.p_aktif!=null)g.aktif=!!a.p_aktif;return{ok:true}}
   case 'admin_guru_hapus':{admin();const i=S.guru.findIndex(x=>x.id===a.p_id);if(i<0)E('guru_tidak_ada');S.guru.splice(i,1);return{ok:true}}
   case 'admin_pin_ganti':{admin();if(ph(String(a.p_lama==null?'':a.p_lama).trim())!==adminH())E('pin_salah');
-    const nb=String(a.p_baru==null?'':a.p_baru).trim();if(!/^[0-9]{4,12}$/.test(nb))E('pin_tidak_valid');if(S.guru.some(g=>g.pin_hash===ph(nb)))E('pin_dipakai');S.admin_pin_hash=ph(nb);return{ok:true}}
+    const nb=String(a.p_baru==null?'':a.p_baru).trim();if(!/^[0-9]{8,12}$/.test(nb))E('pin_tidak_valid');if(S.guru.some(g=>g.pin_hash===ph(nb)))E('pin_dipakai');S.admin_pin_hash=ph(nb);return{ok:true}}
   case 'guru_sesi_buat':{
     guru();const t=String(a.p_token==null?'':a.p_token).trim().toUpperCase();
     if(!/^[A-Z0-9]{4,10}$/.test(t))E('token_tidak_valid');
@@ -2756,7 +2764,7 @@ function cbtEngine(S,fn,a,now,rid){
   case 'guru_pantau':{guru();const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');
     const ps=S.peserta.filter(p=>p.sesi_id===s.id).sort((x,y)=>x.kelas<y.kelas?-1:x.kelas>y.kelas?1:x.absen-y.absen).map(p=>{
       const st=Object.assign({},p.state);delete st.log;delete st.tests;
-      return{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,viol:int(p.state.viol,0),ada_hasil:p.hasil!=null,state:st}});
+      return{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,viol:int(p.state.viol,0),ada_hasil:p.hasil!=null,nilai_guru:p.nilai_guru==null?null:p.nilai_guru,state:st}});
     return{server_ms:now,sesi:sesiRow(s),peserta:ps}}
   case 'guru_aksi':{guru();if(!S.sesi.some(x=>x.id===a.p_sesi))E('sesi_tidak_ada');
     const t=a.p_tipe,d=a.p_data||{};
@@ -2772,7 +2780,15 @@ function cbtEngine(S,fn,a,now,rid){
     else E('aksi_tidak_dikenal');
     return{n}}
   case 'guru_detail':{guru();const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
-    return{server_ms:now,peserta:{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,state:p.state},snap:p.snap==null?null:p.snap,hasil:p.hasil==null?null:p.hasil}}
+    return{server_ms:now,peserta:{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,state:p.state,nilai_guru:p.nilai_guru==null?null:p.nilai_guru},snap:p.snap==null?null:p.snap,hasil:p.hasil==null?null:p.hasil}}
+  case 'guru_nilai':{guru();const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');if(p.hasil==null)E('belum_ada_hasil');
+    const n=a.p_nilai;if(!isObj(n))E('nilai_tidak_valid');
+    const o={};let tot=0;
+    for(const[k,mx]of[['rancangan',10],['analisis',8],['dokumentasi',7],['sikap',5]]){
+      if(typeof n[k]!=='number'||!isFinite(n[k]))E('nilai_tidak_valid');
+      const v=Math.round(n[k]*10)/10;if(v<0||v>mx)E('nilai_tidak_valid');o[k]=v;tot+=v}
+    o.total=Math.round(tot*10)/10;o.catatan=String(n.catatan==null?'':n.catatan).slice(0,500);o.waktu=now;
+    p.nilai_guru=o;return{ok:true,total:o.total}}
   case 'siswa_gabung':{
     const nm=String(a.p_nama==null?'':a.p_nama).trim(),kl=String(a.p_kelas==null?'':a.p_kelas).trim().toUpperCase(),ns=String(a.p_nis==null?'':a.p_nis).trim();
     if(nm.length<3||nm.length>60)E('nama_tidak_valid');
@@ -2822,9 +2838,12 @@ let SW=null,BEAT=0,HD=false;
 const ERRM={skema_belum_ada:'Fungsi basis data tidak ditemukan. Jalankan supabase_setup.sql di SQL Editor (lihat Panduan), tunggu 1 menit, lalu coba lagi. Periksa juga Project URL.',jaringan:'Tidak bisa terhubung ke basis data. Periksa koneksi internet.',respons_tidak_valid:'Respons basis data tidak valid. Periksa alamat dan kunci basis data.',penyimpanan:'Penyimpanan browser tidak bisa dipakai (jendela pribadi?).',
   token_salah:'Token tidak ditemukan. Periksa token dari guru.',sesi_tutup:'Sesi sudah ditutup guru.',sudah_masuk:'Akun ini sudah masuk di perangkat lain. Minta guru mereset login.',
   kelas_tidak_diizinkan:'Kelas Anda tidak terdaftar pada sesi ini.',nis_wajib:'NIS wajib diisi (minimal 4 karakter).',nama_tidak_valid:'Nama minimal 3 huruf.',kelas_tidak_valid:'Isi kelas.',absen_tidak_valid:'Nomor absen 1 sampai 99.',
-  kunci_salah:'Akses guru tidak berlaku lagi. Keluar lalu masuk kembali dengan PIN.',pin_salah:'PIN salah.',terlalu_banyak:'Terlalu banyak percobaan. Tunggu 30 detik lalu coba lagi.',bukan_admin:'Hanya admin yang dapat melakukan ini.',guru_tidak_ada:'Akun guru tidak ditemukan.',pin_tidak_valid:'PIN harus angka 4 sampai 12 digit.',pin_dipakai:'PIN itu sudah dipakai guru lain.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
+  kunci_salah:'Akses guru tidak berlaku lagi. Keluar lalu masuk kembali dengan PIN.',pin_salah:'PIN salah.',terlalu_banyak:'Terlalu banyak percobaan. Tunggu 1 menit lalu coba lagi.',belum_ada_hasil:'Siswa belum mengirim hasil.',nilai_tidak_valid:'Nilai di luar rentang yang diizinkan.',bukan_admin:'Hanya admin yang dapat melakukan ini.',guru_tidak_ada:'Akun guru tidak ditemukan.',pin_tidak_valid:'PIN harus angka 8 sampai 12 digit.',pin_dipakai:'PIN itu sudah dipakai guru lain.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
   sesi_tidak_ada:'Sesi tidak ditemukan.',pesan_kosong:'Pesan tidak boleh kosong.',hasil_tidak_valid:'Hasil tidak valid.',terlalu_besar:'Berkas hasil terlalu besar.'};
 const errMsg=c=>ERRM[c]||(/^server_/.test(c)?'Server basis data bermasalah ('+c.slice(7)+').':'Terjadi galat ('+c+').');
+function devId(){let d='';try{d=localStorage.getItem('tjkt-dev')||''}catch(e){}
+  if(!/^[0-9a-f]{24}$/.test(d)){const a=new Uint8Array(12);(window.crypto||{getRandomValues:x=>x.forEach((_,i)=>x[i]=Math.random()*256)}).getRandomValues(a);d=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');try{localStorage.setItem('tjkt-dev',d)}catch(e){}}
+  return d}
 const dbRemote=()=>!!(DBC.url&&DBC.key);
 const gk=()=>dbRemote()?DBC.gkey:'lokal';
 function loadDBC(){
@@ -2879,9 +2898,9 @@ function hideGate(){$('#gate').hidden=true;document.body.classList.remove('gate-
 function renderGate(tab,msg){
   CB.gateTab=tab;
   let f;
-  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Masuk asesmen</button>';
-  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><button class="btn pri" data-gate="guru" id="gt-go">Masuk sebagai guru</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
-  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">Simulator Jaringan TJKT</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
+  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Mulai Asesmen</button>';
+  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><button class="btn pri" data-gate="guru" id="gt-go">Login</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
+  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">SIMNET</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
   const first1=$('#gt-nama')||$('#gt-pin');if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
 }
 const gerr=m=>{const e=$('#gt-err');if(e)e.textContent=m};
@@ -2930,9 +2949,9 @@ async function gateGuru(){
   if(!p)return gerr('Masukkan PIN.');
   if(GG_BUSY)return;GG_BUSY=true;const btn=$('#gt-go');if(btn){btn.disabled=true;btn.textContent='Memeriksa...'}
   try{
-    const r=await rpc('guru_login',{p_pin:p});
+    const r=await rpc('guru_login',{p_pin:p,p_dev:devId()});
     if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah');
-    DBC.gkey=dbRemote()?r.key:'';PERAN=r.peran;PNAMA=r.nama||'';ADM.list=null;ADM.err='';
+    DBC.gkey=dbRemote()?r.key:'';PINDEF=!!r.pin_default;PERAN=r.peran;PNAMA=r.nama||'';ADM.list=null;ADM.err='';
     ROLE='guru';stopBeat();hardenOff();hideGate();UI.tab='guru';applyRole();toast('Mode guru aktif.','good');
   }catch(e){gerr(errMsg(e.message));const i=$('#gt-pin');if(i){i.value='';i.focus()}}
   finally{GG_BUSY=false;const b2=$('#gt-go');if(b2){b2.disabled=false;b2.textContent='Masuk sebagai guru'}}
@@ -3025,7 +3044,9 @@ function addViol(ket){
   if(!hdOn())return;
   const n=Date.now();if(n-CB.lastViol<2500)return;CB.lastViol=n;
   CB.viol++;cbLog(ket,true);saveSW();toast('Pelanggaran dicatat: '+ket,'warn');
-  if(GP.maxViol>0&&CB.viol-CB.base>=GP.maxViol)setLocked(true);
+  const kunci=GP.maxViol>0&&CB.viol-CB.base>=GP.maxViol;
+  if(GP.alarmViol!==false)violAlarm(kunci);
+  if(kunci)setLocked(true);
   beat();
 }
 const hVis=()=>{if(document.visibilityState==='hidden')addViol('Berpindah tab atau jendela')};
@@ -3075,6 +3096,7 @@ function monStatus(p,now){
   if(off)return['Offline','mute'];
   return p.status==='mengerjakan'?['Mengerjakan','acc']:['Menunggu','mute'];
 }
+const perlu=p=>(p.viol>=2)||!!p.terkunci;
 function monRender(){
   const m=$('#mon');if(!m||m.hidden)return;
   const d=MON.data,now=d?d.server_ms:Date.now(),ps=d?d.peserta:[];
@@ -3088,14 +3110,14 @@ function monRender(){
   if(cur)h+='<div class="row" style="margin-top:8px;align-items:center"><span class="muted small">Token siswa</span><b class="tok" id="mon-tok">'+esc(cur.token)+'</b><button class="btn sm" data-mo="copytok">Salin</button><span class="pill '+(cur.status==='buka'?'good':'bad')+'">'+(cur.status==='buka'?'Sesi dibuka':'Sesi ditutup')+'</span><button class="btn sm" data-mo="toggle">'+(cur.status==='buka'?'Tutup sesi':'Buka sesi')+'</button><button class="btn sm bad" data-mo="del">Hapus sesi</button></div>';
   h+='</div>';
   if(cur){
-    h+='<div class="stats"><div><b>'+ps.length+'</b><span>Peserta</span></div><div><b>'+cnt.work+'</b><span>Mengerjakan</span></div><div><b>'+cnt.done+'</b><span>Selesai</span></div><div><b style="color:var(--bad)">'+cnt.lock+'</b><span>Terkunci</span></div></div>';
+    h+='<div class="stats"><div><b>'+ps.length+'</b><span>Peserta</span></div><div><b>'+cnt.work+'</b><span>Mengerjakan</span></div><div><b>'+cnt.done+'</b><span>Selesai</span></div><div><b style="color:var(--bad)">'+cnt.lock+'</b><span>Terkunci</span></div><div><b style="color:var(--bad)">'+ps.filter(perlu).length+'</b><span>Perlu ditinjau</span></div></div>';
     h+='<div class="row" style="margin:8px 0"><span class="small muted">Untuk semua peserta:</span><button class="btn sm" data-mo="a-kunci">Kunci</button><button class="btn sm" data-mo="a-buka">Buka kunci</button><button class="btn sm" data-mo="a-tambah">+10 menit</button><button class="btn sm" data-mo="a-pesan">Pesan</button><button class="btn sm bad" data-mo="a-akhiri">Akhiri semua</button></div>';
-    h+='<div class="tw"><table class="t mt"><thead><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Sisa</th><th>Skor</th><th>Cek</th><th>Pelang.</th><th>Perangkat/kabel</th><th>Aktif</th><th>Aksi</th></tr></thead><tbody>';
-    if(!ps.length)h+='<tr><td colspan="11" class="muted" style="padding:18px;text-align:center">Belum ada siswa yang masuk. Bagikan token <b>'+esc(cur.token)+'</b>.</td></tr>';
+    h+='<div class="tw"><table class="t mt"><thead><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Sisa</th><th>Skor</th><th>Nilai guru</th><th>Cek</th><th>Pelang.</th><th>Perangkat/kabel</th><th>Aktif</th><th>Aksi</th></tr></thead><tbody>';
+    if(!ps.length)h+='<tr><td colspan="12" class="muted" style="padding:18px;text-align:center">Belum ada siswa yang masuk. Bagikan token <b>'+esc(cur.token)+'</b>.</td></tr>';
     for(const p of ps){
       const[sl,sc]=monStatus(p,now),s=p.state||{},age=Math.max(0,(now-p.terakhir)/1000);
       const sisa=p.status==='selesai'||s.sisa==null?'-':(s.phase==='run'?fmtS(s.sisa-age):'-');
-      h+='<tr data-pid="'+p.id+'"><td>'+p.absen+'</td><td><b>'+esc(p.nama)+'</b></td><td>'+esc(p.kelas)+'</td><td><span class="pill st-'+sc+'">'+sl+'</span></td><td class="mono">'+sisa+(p.tambah_menit?' <span class="muted">(+'+p.tambah_menit+')</span>':'')+'</td><td class="mono">'+(s.skor!=null?fmt1(s.skor):'-')+'</td><td>'+(s.cek!=null?s.cek:'-')+'</td><td style="color:'+(p.viol?'var(--bad)':'inherit')+'">'+p.viol+'</td><td>'+(s.dev!=null?s.dev+'/'+s.kab:'-')+'</td><td class="muted">'+(age<60?Math.round(age)+' dtk':Math.round(age/60)+' mnt')+'</td><td class="act"><button class="btn sm" data-ma="detail">Detail</button><button class="btn sm" data-ma="'+(p.terkunci?'buka':'kunci')+'">'+(p.terkunci?'Buka':'Kunci')+'</button><button class="btn sm" data-ma="tambah">+10</button><button class="btn sm" data-ma="pesan">Pesan</button>'+(p.status==='selesai'?'':'<button class="btn sm" data-ma="akhiri">Akhiri</button>')+(p.ada_hasil?'<button class="btn sm pri" data-ma="hasil">Periksa</button>':'')+'<button class="btn sm bad" data-ma="reset">Reset</button></td></tr>';
+      h+='<tr data-pid="'+p.id+'"><td>'+p.absen+'</td><td><b>'+esc(p.nama)+'</b></td><td>'+esc(p.kelas)+'</td><td><span class="pill st-'+sc+'">'+sl+'</span></td><td class="mono">'+sisa+(p.tambah_menit?' <span class="muted">(+'+p.tambah_menit+')</span>':'')+'</td><td class="mono">'+(s.skor!=null?fmt1(s.skor):'-')+'</td><td class="mono">'+(p.nilai_guru?fmt1(p.nilai_guru.total):'-')+'</td><td>'+(s.cek!=null?s.cek:'-')+'</td><td style="color:'+(p.viol?'var(--bad)':'inherit')+'">'+p.viol+(perlu(p)?' <span title="Perlu ditinjau guru" aria-label="Perlu ditinjau">⚠</span>':'')+'</td><td>'+(s.dev!=null?s.dev+'/'+s.kab:'-')+'</td><td class="muted">'+(age<60?Math.round(age)+' dtk':Math.round(age/60)+' mnt')+'</td><td class="act"><button class="btn sm" data-ma="detail">Detail</button><button class="btn sm" data-ma="'+(p.terkunci?'buka':'kunci')+'">'+(p.terkunci?'Buka':'Kunci')+'</button><button class="btn sm" data-ma="tambah">+10</button><button class="btn sm" data-ma="pesan">Pesan</button>'+(p.status==='selesai'?'':'<button class="btn sm" data-ma="akhiri">Akhiri</button>')+(p.ada_hasil?'<button class="btn sm pri" data-ma="hasil">Periksa</button><button class="btn sm pri" data-ma="nilai">Nilai</button>':'')+'<button class="btn sm bad" data-ma="reset">Reset</button></td></tr>';
     }
     h+='</tbody></table></div>';
   }else h+='<div class="card muted">Belum ada sesi. Tekan <b>+ Sesi baru</b> untuk membuat token asesmen.</div>';
@@ -3108,11 +3130,11 @@ function cbConfirm(txt,fn,yes){CB.confirmFn=fn;showDlg(dlgShell('Konfirmasi','<p
 function sesiDialog(){
   const sf=(k,l,t,x)=>'<div class="fld"><label for="sf-'+k+'">'+l+'</label><input id="sf-'+k+'" data-sf="'+k+'" type="'+(t||'text')+'" value="'+esc(x)+'" autocomplete="off"></div>';
   const ck=(k,l)=>'<label class="row" style="margin-top:4px"><input type="checkbox" data-sf="'+k+'" '+(GP[k]?'checked':'')+'> <span class="small">'+l+'</span></label>';
-  showDlg(dlgShell('Sesi asesmen baru','<div class="g2">'+sf('judul','Judul sesi','text','Asesmen Praktik Sumatif Akhir Semester')+'<div class="fld"><label for="sf-token">Token (huruf besar atau angka)</label><div class="row" style="flex-wrap:nowrap"><input id="sf-token" data-sf="token" value="'+genTok()+'" maxlength="10" style="flex:1;min-width:0;font-family:var(--ff-mono)"><button class="btn sm" data-g="gentok">Acak</button></div></div></div><div class="g2"><div class="fld"><label for="sf-paket">Paket soal</label><select id="sf-paket" data-sf="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A'],['B','B'],['C','C'],['D','D']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+sf('durasi','Durasi (menit)','number',GP.durasi)+'</div><div class="g2">'+sf('maxCek','Jumlah Cek mandiri','number',GP.maxCek)+sf('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number',GP.maxViol)+'</div>'+sf('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number',GP.alarmMenit)+sf('kelas','Kelas yang boleh masuk (pisahkan koma, kosongkan = semua)','text',GP.kelas)+ck('reqNIS','Wajibkan NIS')+ck('wajibFS','Wajib layar penuh')+ck('blokirSalin','Blokir salin, tempel, dan klik kanan')+ck('allow3D','Boleh tampilan 3D')+ck('allowCLI','Boleh CLI router dan switch')+'<p class="small" id="sf-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="sesibuat">Buat sesi</button></div>'));
+  showDlg(dlgShell('Sesi asesmen baru','<div class="g2">'+sf('judul','Judul sesi','text','Asesmen Praktik Sumatif Akhir Semester')+'<div class="fld"><label for="sf-token">Token (huruf besar atau angka)</label><div class="row" style="flex-wrap:nowrap"><input id="sf-token" data-sf="token" value="'+genTok()+'" maxlength="10" style="flex:1;min-width:0;font-family:var(--ff-mono)"><button class="btn sm" data-g="gentok">Acak</button></div></div></div><div class="g2"><div class="fld"><label for="sf-paket">Paket soal</label><select id="sf-paket" data-sf="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A'],['B','B'],['C','C'],['D','D']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+sf('durasi','Durasi (menit)','number',GP.durasi)+'</div><div class="g2">'+sf('maxCek','Jumlah Cek mandiri','number',GP.maxCek)+sf('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number',GP.maxViol)+'</div>'+sf('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number',GP.alarmMenit)+sf('kelas','Kelas yang boleh masuk (pisahkan koma, kosongkan = semua)','text',GP.kelas)+ck('reqNIS','Wajibkan NIS')+ck('wajibFS','Wajib layar penuh')+ck('blokirSalin','Blokir salin, tempel, dan klik kanan')+ck('alarmViol','Alarm dan getar saat murid melanggar')+ck('allow3D','Boleh tampilan 3D')+ck('allowCLI','Boleh CLI router dan switch')+'<p class="small" id="sf-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="sesibuat">Buat sesi</button></div>'));
 }
 async function sesiBuat(){
   const v=k=>{const e=$('[data-sf="'+k+'"]');return e?(e.type==='checkbox'?e.checked:e.value):''};
-  const pol={sekolah:GP.sekolah,mapel:GP.mapel,paket:v('paket'),durasi:clamp(parseInt(v('durasi'))||90,30,180),maxCek:clamp(parseInt(v('maxCek')),0,10)||0,maxViol:clamp(parseInt(v('maxViol')),0,20)||0,alarmMenit:clamp(parseInt(v('alarmMenit')),0,30)||0,kelas:String(v('kelas')).trim().slice(0,100),reqNIS:v('reqNIS'),wajibFS:v('wajibFS'),blokirSalin:v('blokirSalin'),allow3D:v('allow3D'),allowCLI:v('allowCLI'),allowAbort:false,allowRedo:false,allowCopy:false};
+  const pol={sekolah:GP.sekolah,mapel:GP.mapel,paket:v('paket'),durasi:clamp(parseInt(v('durasi'))||90,30,180),maxCek:clamp(parseInt(v('maxCek')),0,10)||0,maxViol:clamp(parseInt(v('maxViol')),0,20)||0,alarmMenit:clamp(parseInt(v('alarmMenit')),0,30)||0,kelas:String(v('kelas')).trim().slice(0,100),reqNIS:v('reqNIS'),wajibFS:v('wajibFS'),blokirSalin:v('blokirSalin'),alarmViol:v('alarmViol'),allow3D:v('allow3D'),allowCLI:v('allowCLI'),allowAbort:false,allowRedo:false,allowCopy:false};
   const e=$('#sf-err');
   try{
     const s=await rpc('guru_sesi_buat',{p_key:gk(),p_token:String(v('token')).toUpperCase(),p_judul:String(v('judul')).slice(0,80),p_policy:pol});
@@ -3151,10 +3173,32 @@ async function monHasil(pid){
   try{const r=await rpc('guru_detail',{p_key:gk(),p_pid:pid});if(!r.hasil){toast('Belum ada hasil.','warn');return}monClose();verifyObj(r.hasil)}
   catch(e){toast(errMsg(e.message),'bad')}
 }
+const cn=v=>String(v).replace('.',',');
+function csvNilai(p){const g=p.nilai_guru;if(!g)return['','','','','','',''];
+  const a=p.state&&p.state.skor!=null?+p.state.skor:null;
+  return[cn(g.rancangan),cn(g.analisis),cn(g.dokumentasi),cn(g.sikap),cn(g.total),a==null?'':cn(Math.round((a+g.total)*10)/10),g.catatan||'']}
+const NL=[['rancangan','Rancangan (tujuan, kebutuhan, topologi, IP)',10],['analisis','Analisis pengujian dan kendala',8],['dokumentasi','Dokumentasi dan refleksi',7],['sikap','Sikap kerja (mandiri, jujur, tertib)',5]];
+async function monNilai(pid){
+  try{
+    const r=await rpc('guru_detail',{p_key:gk(),p_pid:pid}),h=r.hasil,pp=r.peserta,g=pp.nilai_guru||{};
+    if(!h){toast('Siswa belum mengirim hasil.','warn');return}
+    MON.nilaiPid=pid;
+    const jw=h.jawaban||{};
+    let x='<p class="small"><b>'+esc(pp.nama)+'</b> · '+esc(pp.kelas)+' · absen '+esc(pp.absen)+' · nilai otomatis <b>'+fmt1((h.skor||{}).otomatis||0)+' / 70</b> · bukti uji '+((h.bukti||[]).length)+' kali</p>';
+    x+='<div style="max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">'+NOTE_FIELDS.map(f=>'<div class="small" style="margin-bottom:8px"><b>'+esc(f[1])+'</b><div style="white-space:pre-wrap;word-break:break-word">'+(jw[f[0]]?esc(jw[f[0]]):'<span class="muted">(kosong)</span>')+'</div></div>').join('')+'</div>';
+    x+='<div class="g2">'+NL.map(k=>'<div class="fld"><label for="nl-'+k[0]+'">'+k[1]+' (maks '+k[2]+')</label><input id="nl-'+k[0]+'" data-nl="'+k[0]+'" type="number" min="0" max="'+k[2]+'" step="0.5" value="'+(g[k[0]]!=null?g[k[0]]:'')+'" inputmode="decimal"></div>').join('')+'</div>';
+    x+='<div class="fld"><label for="nl-catatan">Catatan untuk siswa (opsional)</label><textarea id="nl-catatan" rows="2" maxlength="500">'+esc(g.catatan||'')+'</textarea></div>';
+    x+='<p class="small" style="margin:6px 0"><b>Nilai guru: <span id="nl-tot">'+(g.total!=null?fmt1(g.total):'0,0')+'</span> / 30 · Nilai akhir: <span id="nl-akhir">-</span> / 100</b></p><p class="small" id="nl-err" style="color:var(--bad)" role="alert"></p><div class="row"><button class="btn pri" data-g="nilaisimpan">Simpan nilai</button><button class="btn" data-g="close">Tutup</button></div>';
+    MON.nilaiAuto=(h.skor||{}).otomatis||0;
+    showDlg(dlgShell('Nilai guru: '+esc(pp.nama),x),true);nlHitung();
+  }catch(e){toast(errMsg(e.message),'bad')}
+}
+function nlVals(){const o={};let ok=true;for(const k of NL){const el=$('#nl-'+k[0]);const v=el&&el.value!==''?parseFloat(el.value):NaN;if(!(v>=0&&v<=k[2]))ok=false;o[k[0]]=v}return{o,ok}}
+function nlHitung(){const{o}=nlVals();let t=0;for(const k of NL)if(o[k[0]]>=0)t+=Math.min(k[2],o[k[0]]);const a=$('#nl-tot'),b=$('#nl-akhir');if(a)a.textContent=fmt1(t);if(b)b.textContent=fmt1(MON.nilaiAuto+t)}
 function monCSV(){
   const d=MON.data;if(!d)return;
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const rows=[['Nama','Kelas','Absen','NIS','Status','Skor otomatis (maks 70)','Pelanggaran','Cek mandiri','Terkunci']].concat(d.peserta.map(p=>[p.nama,p.kelas,p.absen,p.nis,p.status,p.state&&p.state.skor!=null?String(p.state.skor).replace('.',','):'',p.viol,p.state&&p.state.cek!=null?p.state.cek:'',p.terkunci?'ya':'tidak']));
+  const rows=[['Nama','Kelas','Absen','NIS','Status','Skor otomatis (maks 70)','Pelanggaran','Cek mandiri','Terkunci','Rancangan (10)','Analisis (8)','Dokumentasi (7)','Sikap (5)','Nilai guru (maks 30)','Nilai akhir (maks 100)','Catatan guru']].concat(d.peserta.map(p=>[p.nama,p.kelas,p.absen,p.nis,p.status,p.state&&p.state.skor!=null?String(p.state.skor).replace('.',','):'',p.viol,p.state&&p.state.cek!=null?p.state.cek:'',p.terkunci?'ya':'tidak'].concat(csvNilai(p))));
   const cur=MON.sesi.find(s=>s.id===MON.cur)||{token:'sesi'};
   saveAny('Rekap_'+cur.token+'.csv','﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 }
@@ -3206,7 +3250,7 @@ async function admLoad(){
 const fmtTgl=ms=>ms?new Date(ms).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'belum pernah';
 function guruCard(){
   if(ADM.list===null)setTimeout(admLoad,0);
-  let h='<div class="card" id="adm-card"><h3>Akun guru lain</h3><p class="small muted">Anda admin. Buat PIN acak untuk setiap guru lain; PIN berlaku di semua browser dan perangkat. Hanya Anda yang dapat membuatnya.</p>';
+  let h=(PINDEF?'<div class="card" style="border-color:var(--bad)" id="pin-warn" role="alert"><b style="color:var(--bad)">PIN admin masih bawaan (6978).</b><p class="small" style="margin:6px 0">PIN ini mudah ditebak. Ganti dengan angka 8 sampai 12 digit sebelum asesmen dimulai.</p><button class="btn sm pri" data-act="gpchpin">Ganti PIN admin sekarang</button></div>':'')+'<div class="card" id="adm-card"><h3>Akun guru lain</h3><p class="small muted">Anda admin. Buat PIN acak untuk setiap guru lain; PIN acak 8 digit berlaku di semua browser dan perangkat. Hanya Anda yang dapat membuatnya.</p>';
   if(ADM.err)h+='<p class="small" style="color:var(--bad)" role="alert">'+esc(ADM.err)+'</p>';
   if(!dbRemote())h+='<p class="small" style="color:var(--warn,#a15c00)">Basis data Supabase belum terhubung. Akun guru di mode uji coba hanya ada di browser ini.</p>';
   if(ADM.list===null)h+='<p class="small muted">Memuat...</p>';
@@ -3233,6 +3277,12 @@ function cbBind(){
   $('#gate').addEventListener('input',e=>{if(e.target.id==='gt-token'||e.target.id==='gt-kelas')e.target.value=e.target.value.toUpperCase()});
   $('#dlg').addEventListener('click',async e=>{
     const t=e.target.closest('[data-g]');if(!t)return;
+    if(t.dataset.g==='nilaisimpan'){
+      const{o,ok}=nlVals(),er=$('#nl-err');
+      if(!ok){er.textContent='Isi keempat nilai dengan angka dalam rentang yang diizinkan.';return}
+      o.catatan=(($('#nl-catatan')||{}).value||'').trim();
+      try{const r=await rpc('guru_nilai',{p_key:gk(),p_pid:MON.nilaiPid,p_nilai:o});closeDlg();toast('Nilai guru tersimpan: '+fmt1(r.total)+' / 30.','good');monPoll()}catch(x){er.textContent=errMsg(x.message)}
+      return}
     if(t.dataset.g==='admbuat'){
       const nm=(($('#adm-nama')||{}).value||'').trim(),er=$('#adm-err');
       if(nm.length<3){er.textContent='Nama minimal 3 huruf.';return}
@@ -3241,12 +3291,13 @@ function cbBind(){
       const v=($('#adm-pin')||{}).textContent||'';try{navigator.clipboard.writeText(v).then(()=>toast('PIN disalin.','good'),()=>toast('Salin manual: '+v,'warn'))}catch(x){toast('Salin manual: '+v,'warn')}
     }
   });
+  $('#dlg').addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.nl)nlHitung()});
   $('#lockov').addEventListener('click',e=>{if(e.target.closest('[data-lk="fs"]')){try{document.documentElement.requestFullscreen().then(cbOverlay).catch(()=>toast('Layar penuh tidak didukung browser ini.','warn'))}catch(x){}}});
   $('#cbmsg').addEventListener('click',e=>{if(e.target.closest('[data-lk="msgok"]')){$('#cbmsg').hidden=true}});
   $('#mon').addEventListener('click',e=>{
     const a=e.target.closest('[data-ma]');
     if(a){const pid=a.closest('tr').dataset.pid,t=a.dataset.ma;
-      if(t==='detail')monDetail(pid);else if(t==='hasil')monHasil(pid);
+      if(t==='detail')monDetail(pid);else if(t==='hasil')monHasil(pid);else if(t==='nilai')monNilai(pid);
       else if(t==='kunci'||t==='buka'||t==='akhiri')monAksi(t,pid);
       else if(t==='tambah')monAksi('tambah',pid,{menit:10});
       else if(t==='pesan'){MON.msgTo=pid;showDlg(dlgShell('Kirim pesan','<div class="fld"><label for="mon-msg">Pesan untuk siswa</label><textarea id="mon-msg" rows="4" maxlength="300"></textarea></div><div class="row" style="margin-top:8px"><button class="btn pri" data-g="monsend">Kirim</button></div>'),true)}
@@ -3293,7 +3344,8 @@ function beepSeq(kind){
   try{
     const t0=AC.currentTime+0.05,g=AC.createGain();g.gain.value=0;g.connect(AC.destination);
     const o=AC.createOscillator();o.type='square';o.connect(g);
-    const seq=kind==='main'?[[880,.28],[660,.28],[880,.28],[660,.28],[880,.28],[660,.28],[880,.28],[660,.28]]:[[880,.2],[880,.2]];
+    const sir=n=>Array.from({length:n},(_,i)=>[i%2?700:1100,.18]);
+    const seq=kind==='main'?[[880,.28],[660,.28],[880,.28],[660,.28],[880,.28],[660,.28],[880,.28],[660,.28]]:kind==='viol'?sir(8):kind==='lock'?sir(20):[[880,.2],[880,.2]];
     let t=t0;g.gain.setValueAtTime(0,t0);
     seq.forEach((s,i)=>{o.frequency.setValueAtTime(s[0],t);g.gain.setValueAtTime(.16,t);g.gain.setValueAtTime(i%2&&kind!=='main'?0:.16,t+s[1]-.04);t+=s[1]});
     g.gain.setValueAtTime(0,t);o.start(t0);o.stop(t+.05);
@@ -3304,15 +3356,21 @@ function fireOn(hot){
   const f=$('#alarmfx');if(!f)return;
   f.hidden=false;f.classList.toggle('hot',!!hot);
 }
-function fireOff(){const f=$('#alarmfx');if(f){f.hidden=true;f.classList.remove('hot')}CB.alarmed=false;CB.mini={}}
+function fireOff(){const f=$('#alarmfx');if(f&&!CB.flash){f.hidden=true;f.classList.remove('hot')}CB.alarmed=false;CB.mini={}}
 function alarmTick(){
   const m=ROLE==='siswa'?GP.alarmMenit:0;
-  if(ROLE!=='siswa'||AS.phase!=='run'||!(m>0)){if(CB.alarmed||(!$('#alarmfx').hidden&&!CB.alarmDemo))fireOff();return}
+  if(ROLE!=='siswa'||AS.phase!=='run'||!(m>0)){if(CB.alarmed||(!$('#alarmfx').hidden&&!CB.alarmDemo&&!CB.flash))fireOff();return}
   const left=asesLeft();
   if(left>m*60000||left<=0){if(CB.alarmed)fireOff();return}
   if(!CB.alarmed){CB.alarmed=true;CB.mini={};beepSeq('main');vibrate([400,200,400,200,400,200,600]);toast('Waktu tersisa '+Math.ceil(left/60000)+' menit.','warn')}
   fireOn(left<=60000);
   for(const s of[60,10])if(left<=s*1000&&!CB.mini[s]){CB.mini[s]=1;beepSeq('mini');vibrate([300,150,300])}
+}
+function violAlarm(kunci){
+  beepSeq(kunci?'lock':'viol');vibrate(kunci?[600,150,600,150,600,150,900]:[500,150,500]);
+  const f=$('#alarmfx');if(!f)return;
+  CB.flash=true;f.hidden=false;f.classList.add('viol');
+  clearTimeout(CB.flashT);CB.flashT=setTimeout(()=>{CB.flash=false;f.classList.remove('viol');if(!CB.alarmed&&!CB.alarmDemo)f.hidden=true},kunci?4500:2800);
 }
 PA.alarmtest=()=>{
   CB.alarmDemo=true;beepSeq('main');vibrate([400,200,400,200,400]);fireOn(false);
