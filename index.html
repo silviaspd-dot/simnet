@@ -244,7 +244,7 @@ table.mt{min-width:860px}table.mt td.act{white-space:nowrap}table.mt .btn.sm{min
   <header class="top">
     <div class="brand">
       <svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true"><rect x="-15" y="-15" width="30" height="30" rx="7" fill="var(--accent)"/><g stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" fill="none"><path d="M-8 6V-4M0 6V-8M8 6V-1"/></g><g fill="var(--accent-ink)"><circle cx="-8" cy="-6" r="2.6"/><circle cx="0" cy="-10" r="2.6"/><circle cx="8" cy="-3" r="2.6"/></g></svg>
-      <div><h1>Simulator Jaringan</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
+      <div><h1>Simulator Jaringan TJKT</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
     </div>
     <span class="pill warn" id="as-badge" hidden></span>
     <span class="pill bad" id="net-badge" hidden>Terputus</span>
@@ -2599,12 +2599,11 @@ function asesInit(){
   setInterval(()=>{asesTick();const l=$('#gp-left');if(l&&AS.phase==='run')l.textContent=fmtT(asesLeft())},1000);asesTick();
 }
 /* ================= MODE GURU: KENDALI PENUH DAN BATASAN MURID ================= */
-const GP_DEFAULT_PIN='6978';
 const GP_KEY='tjkt-guru-v1',GP_SALT='tjkt-guru-2026';
-const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5};
+const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5,pinv:0};
 const GP=Object.assign({},GP_DEF);
-let GP_PEND=null,GP_FAIL=0,GP_LOCK=0;
-function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);GP.alarmMenit=clamp(+GP.alarmMenit||0,0,30);if(!GP.pin)GP.pin=pinHash(GP_DEFAULT_PIN)}
+let GP_PEND=null,PERAN='',PNAMA='';
+function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(k==='pin')continue;else if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);GP.alarmMenit=clamp(+GP.alarmMenit||0,0,30)}
 function saveGP(){try{localStorage.setItem(GP_KEY,JSON.stringify(GP))}catch(e){}}
 const pinHash=p=>fnv(String(p)+'|'+GP_SALT);
 function applyRole(){
@@ -2620,24 +2619,19 @@ function applyRole(){
 }
 function pinDialog(title,desc,onOk){
   GP_PEND=onOk;
-  const first=!GP.pin&&title==='Masuk mode guru';
-  const body='<p class="small muted">'+desc+'</p>'+(first?'<div class="fld"><label for="gp-pin">Buat PIN guru (minimal 4 karakter)</label><input id="gp-pin" type="password" autocomplete="off" maxlength="30"></div><div class="fld"><label for="gp-pin2">Ulangi PIN</label><input id="gp-pin2" type="password" autocomplete="off" maxlength="30"></div>':'<div class="fld"><label for="gp-pin">PIN guru</label><input id="gp-pin" type="password" autocomplete="off" maxlength="30"></div>')+'<p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpok">'+(first?'Simpan PIN dan masuk':'Masuk')+'</button></div>';
+  const body='<p class="small muted">'+desc+'</p><div class="fld"><label for="gp-pin">PIN guru</label><input id="gp-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpok" id="gp-go">Masuk</button></div>';
   showDlg(dlgShell(title,body),true);
   setTimeout(()=>{const i=$('#gp-pin');if(i)i.focus()},50);
 }
-function gpSubmit(){
+let GP_BUSY=false;
+async function gpSubmit(){
   const err=$('#gp-err'),say=m=>{if(err)err.textContent=m};
-  const p=($('#gp-pin')||{}).value||'';
-  if(!GP.pin){
-    const p2=($('#gp-pin2')||{}).value||'';
-    if(p.length<4){say('PIN minimal 4 karakter.');return}
-    if(p!==p2){say('Kedua PIN tidak sama.');return}
-    GP.pin=pinHash(p);saveGP();
-  }else{
-    if(Date.now()<GP_LOCK){say('Terlalu banyak percobaan. Coba lagi '+Math.ceil((GP_LOCK-Date.now())/1000)+' detik lagi.');return}
-    if(pinHash(p)!==GP.pin){GP_FAIL++;if(GP_FAIL>=5){GP_FAIL=0;GP_LOCK=Date.now()+30000;say('Terlalu banyak percobaan. Tunggu 30 detik.')}else say('PIN salah.');return}
-    GP_FAIL=0;
-  }
+  const p=(($('#gp-pin')||{}).value||'').trim();
+  if(!p){say('Masukkan PIN.');return}
+  if(GP_BUSY)return;GP_BUSY=true;
+  try{await rpc('guru_login',{p_pin:p}).then(r=>{if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah')})}
+  catch(e){GP_BUSY=false;say(errMsg(e.message));return}
+  GP_BUSY=false;
   const fn=GP_PEND;GP_PEND=null;closeDlg();if(fn)fn();
 }
 function needGuru(title,fn){
@@ -2645,11 +2639,7 @@ function needGuru(title,fn){
   pinDialog(title,'Tindakan ini hanya boleh dilakukan guru. Minta guru memasukkan PIN.',fn);
 }
 PA.rolebtn=()=>{};
-function roleClick(){
-  if(ROLE==='guru'){UI.tab='guru';markTabs();renderPanel();return}
-  pinDialog('Masuk mode guru','Mode guru membuka pengaturan asesmen, pemeriksaan berkas, dan semua fitur tanpa batasan.',()=>{ROLE='guru';UI.tab='guru';applyRole();toast('Mode guru aktif.','good')});
-}
-function exitGuru(){if(typeof monClose==='function')monClose();showGate()}
+function exitGuru(){if(typeof monClose==='function')monClose();DBC.gkey='';PERAN='';PNAMA='';ADM.list=null;ADM.err='';showGate()}
 /* ---------- tindakan guru yang dibungkus PIN untuk murid ---------- */
 const _asabort=PA.asabort,_asredo=PA.asredo;
 PA.asabort=()=>{if(ROLE==='guru'||GP.allowAbort)_asabort();else needGuru('Batalkan asesmen',_asabort)};
@@ -2658,7 +2648,8 @@ PA.asaddtime=()=>{if(AS.phase!=='run')return;AS.id.durasi=(parseInt(AS.id.durasi
 PA.asforce=()=>{if(AS.phase!=='run')return;AS.agree=true;AS.confirmEmpty=true;PA.asfinish();toast('Asesmen diakhiri oleh guru.','good')};
 PA.gpexit=exitGuru;
 PA.gpchpin=()=>{
-  showDlg(dlgShell('Ganti PIN guru','<div class="fld"><label for="gp-old">PIN lama</label><input id="gp-old" type="password" autocomplete="off"></div><div class="fld"><label for="gp-new">PIN baru (minimal 4 karakter)</label><input id="gp-new" type="password" autocomplete="off" maxlength="30"></div><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpchg">Simpan PIN baru</button></div>'),true);
+  if(PERAN!=='admin'){toast('Hanya admin yang dapat mengganti PIN admin.','warn');return}
+  showDlg(dlgShell('Ganti PIN admin','<div class="fld"><label for="gp-old">PIN admin saat ini</label><input id="gp-old" type="password" autocomplete="off" inputmode="numeric"></div><div class="fld"><label for="gp-new">PIN baru (angka, 4 sampai 12 digit)</label><input id="gp-new" type="password" autocomplete="off" maxlength="12" inputmode="numeric"></div><p class="small muted">PIN baru berlaku di semua browser dan perangkat.</p><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpchg">Simpan PIN baru</button></div>'),true);
 };
 PA.gpcopy=()=>{const o=Object.assign({},GP);delete o.pin;showDlg(dlgShell('Salin pengaturan','<p class="small muted">Salin teks ini lalu tempel di Mode guru, bagian Pengaturan, pada komputer lain agar semua murid memakai aturan yang sama. PIN tidak ikut disalin.</p><textarea id="iotxt" rows="9" readonly>'+esc(JSON.stringify(o,null,1))+'</textarea>'),true)};
 PA.gpapply=()=>{
@@ -2669,7 +2660,7 @@ const gpChk=(k,l,d)=>'<label class="row" style="align-items:flex-start;margin-to
 const gpFld=(k,l,t,x)=>'<div class="fld"><label for="gpf-'+k+'">'+l+'</label><input id="gpf-'+k+'" type="'+(t||'text')+'" data-in="gp" data-ch="gp" data-k="'+k+'" value="'+esc(GP[k])+'" autocomplete="off" '+(x||'')+'></div>';
 function panelGuru(){
   if(ROLE!=='guru')return '<div class="card"><p class="small muted">Panel ini hanya untuk guru.</p></div>';
-  let h=dbCard()+'<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>Mode guru</b><span class="pill good">Aktif</span></div><p class="small muted" style="margin:6px 0 0">Semua fitur terbuka dan tidak dibatasi. Pekerjaan Anda di kanvas tidak ikut dicatat sebagai bukti uji murid.</p></div>';
+  let h=(PERAN==='admin'?guruCard():'')+dbCard()+'<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>Mode guru</b><span class="pill good">'+(PERAN==='admin'?'Admin':'Guru')+(PNAMA&&PERAN!=='admin'?' · '+esc(PNAMA):'')+'</span></div><p class="small muted" style="margin:6px 0 0">Semua fitur terbuka dan tidak dibatasi. Pekerjaan Anda di kanvas tidak ikut dicatat sebagai bukti uji murid.</p></div>';
   h+='<div class="card"><h3>Asesmen di komputer ini</h3>';
   if(AS.phase==='run')h+='<p class="small"><b>'+esc(AS.id.nama)+'</b> · '+esc(AS.id.kelas)+' · absen '+esc(AS.id.absen)+'<br>Paket '+asesPaket()+' · sisa waktu <span class="mono" id="gp-left">'+fmtT(asesLeft())+'</span></p><div class="row"><button class="btn sm" data-act="asaddtime">+10 menit</button><button class="btn sm pri" data-act="asforce">Akhiri sekarang</button><button class="btn sm bad" data-act="asabort">Reset</button></div>';
   else if(AS.phase==='done')h+='<p class="small">Selesai: <b>'+esc(AS.id.nama)+'</b> · '+esc(AS.id.kelas)+' · nilai otomatis '+fmt1(AS.result.skor.otomatis)+' / 70.</p><div class="row"><button class="btn sm bad" data-act="asredo">Reset untuk murid berikutnya</button></div>';
@@ -2679,7 +2670,7 @@ function panelGuru(){
   h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpFld('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number','min="0" max="30"')+'<button class="btn sm" data-act="alarmtest" style="margin-top:6px">Uji alarm (6 detik)</button>'+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
   h+='<p class="small muted" style="margin:10px 0 0">Selalu berlaku bagi murid: aktivitas latihan, template, diagnosa otomatis, pemuatan proyek, dan pengaturan dikunci saat asesmen berjalan. Paket, durasi, dan batasan hanya berlaku untuk asesmen yang dimulai setelah diubah.</p></div>';
   h+='<div class="card"><h3>Periksa hasil murid</h3><p class="small muted">Muat berkas JSON dari Google Classroom untuk menghitung ulang skor dan melihat jaringannya.</p><button class="btn sm pri" data-act="asverify">Periksa berkas siswa</button></div>';
-  h+='<div class="card"><h3>Komputer lain dan PIN</h3><p class="small muted">Pengaturan tersimpan per browser dan per komputer. Salin ke komputer lain agar sama.</p><div class="row"><button class="btn sm" data-act="gpcopy">Salin pengaturan</button><button class="btn sm" data-act="gpapply">Terapkan pengaturan</button><button class="btn sm" data-act="gpchpin">Ganti PIN</button></div></div>';
+  h+='<div class="card"><h3>Komputer lain</h3><p class="small muted">Pengaturan asesmen tersimpan per browser. Untuk sesi baru, pengaturan yang berlaku adalah yang Anda isi saat membuat sesi. Salin ke komputer lain jika ingin sama.</p><div class="row"><button class="btn sm" data-act="gpcopy">Salin pengaturan</button><button class="btn sm" data-act="gpapply">Terapkan pengaturan</button></div></div>';
   h+='<div class="row"><button class="btn bad" data-act="gpexit">Keluar mode guru</button></div>';
   return h;
 }
@@ -2701,9 +2692,8 @@ function gpDialog(){
     if(g==='gpok')gpSubmit();
     else if(g==='gpchg'){
       const o=$('#gp-old').value,n=$('#gp-new').value,err=$('#gp-err');
-      if(pinHash(o)!==GP.pin){err.textContent='PIN lama salah.';return}
-      if(n.length<4){err.textContent='PIN baru minimal 4 karakter.';return}
-      GP.pin=pinHash(n);saveGP();closeDlg();toast('PIN diganti.','good');
+      if(!/^[0-9]{4,12}$/.test(n.trim())){err.textContent='PIN baru harus angka 4 sampai 12 digit.';return}
+      rpc('admin_pin_ganti',{p_key:gk(),p_lama:o,p_baru:n}).then(()=>{closeDlg();toast('PIN admin diganti. Berlaku di semua perangkat.','good')}).catch(x=>{err.textContent=errMsg(x.message)});
     }else if(g==='gpimp'){
       const err=$('#gp-err');let o;
       try{o=JSON.parse($('#gp-json').value)}catch(x){err.textContent='Teks bukan JSON yang valid.';return}
@@ -2713,15 +2703,21 @@ function gpDialog(){
       saveGP();closeDlg();applyRole();toast('Pengaturan diterapkan.','good');
     }
   });
-  d.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id&&/^gp-pin2?$/.test(e.target.id)){e.preventDefault();gpSubmit()}});
+  d.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='gp-pin'){e.preventDefault();gpSubmit()}});
 }
 /* ================= MESIN BASIS DATA SESI (mode lokal; cermin dari supabase_setup.sql) ================= */
-function cbtNewStore(){return{guru_key:'lokal',sesi:[],peserta:[]}}
+function cbtNewStore(){return{guru_key:'lokal',admin_pin_hash:null,gagal:0,kunci_sampai:0,guru:[],sesi:[],peserta:[]}}
 function cbtEngine(S,fn,a,now,rid){
   a=a||{};
   const E=c=>{throw new Error(c)};
   const int=(v,d)=>/^-?[0-9]{1,6}$/.test(String(v))?parseInt(v,10):d;
-  const guru=()=>{if(a.p_key==null||a.p_key!==S.guru_key)E('kunci_salah')};
+  const ph=p=>{let h=2166136261;const t=String(p==null?'':p)+'|simnet-guru-2026';for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return 'h'+h.toString(16)};
+  if(!S.guru)S.guru=[];if(S.gagal==null){S.gagal=0;S.kunci_sampai=0}
+  const adminH=()=>S.admin_pin_hash||ph('6978');
+  const guru=()=>{const k=a.p_key;if(k==null||k==='')E('kunci_salah');if(k===S.guru_key)return;if(S.guru.some(g=>g.kunci===k&&g.aktif))return;E('kunci_salah')};
+  const admin=()=>{if(a.p_key==null||a.p_key!==S.guru_key)E('bukan_admin')};
+  const rnd=()=>id()+id();
+  const pinBaru=()=>{for(;;){const p=String(100000+Math.floor(Math.random()*900000));if(ph(p)===adminH()||S.guru.some(g=>g.pin_hash===ph(p)))continue;return p}};
   const sesiRow=s=>({id:s.id,token:s.token,judul:s.judul,status:s.status,policy:s.policy,dibuat:s.dibuat});
   const id=()=>rid();
   const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -2729,6 +2725,22 @@ function cbtEngine(S,fn,a,now,rid){
   switch(fn){
   case 'db_ping':return{ok:true,server_ms:now};
   case 'guru_cek':guru();return{ok:true,server_ms:now};
+  case 'guru_login':{
+    if(S.kunci_sampai>now)E('terlalu_banyak');
+    const h=ph(String(a.p_pin==null?'':a.p_pin).trim());
+    if(h===adminH()){S.gagal=0;return{ok:true,peran:'admin',nama:'Admin',key:S.guru_key,server_ms:now}}
+    const g=S.guru.find(x=>x.pin_hash===h&&x.aktif);
+    if(g){S.gagal=0;g.terakhir=now;return{ok:true,peran:'guru',nama:g.nama,key:g.kunci,server_ms:now}}
+    if(S.gagal+1>=8){S.gagal=0;S.kunci_sampai=now+30000}else S.gagal++;
+    return{ok:false,galat:'pin_salah'}}
+  case 'admin_guru_daftar':admin();return S.guru.slice().sort((x,y)=>x.dibuat-y.dibuat).map(g=>({id:g.id,nama:g.nama,aktif:g.aktif,dibuat:g.dibuat,terakhir:g.terakhir}));
+  case 'admin_guru_buat':{admin();const nm=String(a.p_nama==null?'':a.p_nama).trim();if(nm.length<3||nm.length>60)E('nama_tidak_valid');
+    const p=pinBaru(),g={id:id(),nama:nm,pin_hash:ph(p),kunci:rnd(),aktif:true,dibuat:now,terakhir:0};S.guru.push(g);return{id:g.id,nama:g.nama,pin:p}}
+  case 'admin_guru_reset':{admin();const g=S.guru.find(x=>x.id===a.p_id);if(!g)E('guru_tidak_ada');const p=pinBaru();g.pin_hash=ph(p);g.kunci=rnd();return{id:g.id,nama:g.nama,pin:p}}
+  case 'admin_guru_ubah':{admin();const g=S.guru.find(x=>x.id===a.p_id);if(!g)E('guru_tidak_ada');if(a.p_aktif!=null)g.aktif=!!a.p_aktif;return{ok:true}}
+  case 'admin_guru_hapus':{admin();const i=S.guru.findIndex(x=>x.id===a.p_id);if(i<0)E('guru_tidak_ada');S.guru.splice(i,1);return{ok:true}}
+  case 'admin_pin_ganti':{admin();if(ph(String(a.p_lama==null?'':a.p_lama).trim())!==adminH())E('pin_salah');
+    const nb=String(a.p_baru==null?'':a.p_baru).trim();if(!/^[0-9]{4,12}$/.test(nb))E('pin_tidak_valid');if(S.guru.some(g=>g.pin_hash===ph(nb)))E('pin_dipakai');S.admin_pin_hash=ph(nb);return{ok:true}}
   case 'guru_sesi_buat':{
     guru();const t=String(a.p_token==null?'':a.p_token).trim().toUpperCase();
     if(!/^[A-Z0-9]{4,10}$/.test(t))E('token_tidak_valid');
@@ -2810,7 +2822,7 @@ let SW=null,BEAT=0,HD=false;
 const ERRM={skema_belum_ada:'Fungsi basis data tidak ditemukan. Jalankan supabase_setup.sql di SQL Editor (lihat Panduan), tunggu 1 menit, lalu coba lagi. Periksa juga Project URL.',jaringan:'Tidak bisa terhubung ke basis data. Periksa koneksi internet.',respons_tidak_valid:'Respons basis data tidak valid. Periksa alamat dan kunci basis data.',penyimpanan:'Penyimpanan browser tidak bisa dipakai (jendela pribadi?).',
   token_salah:'Token tidak ditemukan. Periksa token dari guru.',sesi_tutup:'Sesi sudah ditutup guru.',sudah_masuk:'Akun ini sudah masuk di perangkat lain. Minta guru mereset login.',
   kelas_tidak_diizinkan:'Kelas Anda tidak terdaftar pada sesi ini.',nis_wajib:'NIS wajib diisi (minimal 4 karakter).',nama_tidak_valid:'Nama minimal 3 huruf.',kelas_tidak_valid:'Isi kelas.',absen_tidak_valid:'Nomor absen 1 sampai 99.',
-  kunci_salah:'Kunci guru basis data salah.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
+  kunci_salah:'Akses guru tidak berlaku lagi. Keluar lalu masuk kembali dengan PIN.',pin_salah:'PIN salah.',terlalu_banyak:'Terlalu banyak percobaan. Tunggu 30 detik lalu coba lagi.',bukan_admin:'Hanya admin yang dapat melakukan ini.',guru_tidak_ada:'Akun guru tidak ditemukan.',pin_tidak_valid:'PIN harus angka 4 sampai 12 digit.',pin_dipakai:'PIN itu sudah dipakai guru lain.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
   sesi_tidak_ada:'Sesi tidak ditemukan.',pesan_kosong:'Pesan tidak boleh kosong.',hasil_tidak_valid:'Hasil tidak valid.',terlalu_besar:'Berkas hasil terlalu besar.'};
 const errMsg=c=>ERRM[c]||(/^server_/.test(c)?'Server basis data bermasalah ('+c.slice(7)+').':'Terjadi galat ('+c+').');
 const dbRemote=()=>!!(DBC.url&&DBC.key);
@@ -2818,14 +2830,13 @@ const gk=()=>dbRemote()?DBC.gkey:'lokal';
 function loadDBC(){
   DBC.url=DB_DEFAULT.url;DBC.key=DB_DEFAULT.key;
   try{const o=JSON.parse(localStorage.getItem(DBK)||'null');if(o&&typeof o.url==='string'&&typeof o.key==='string'){DBC.url=o.url;DBC.key=o.key}}catch(e){}
-  try{DBC.gkey=localStorage.getItem(GKK)||''}catch(e){}
   try{
     const m=/[#&]cfg=([^&]+)/.exec(location.hash||'');
     if(m){const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
       if(o&&URLOK(o.u||'')&&o.k){DBC.url=o.u;DBC.key=o.k;try{localStorage.setItem(DBK,JSON.stringify({url:o.u,key:o.k}))}catch(e){};history.replaceState(null,'',location.pathname+location.search)}}
   }catch(e){}
 }
-function saveDBC(){try{localStorage.setItem(DBK,JSON.stringify({url:DBC.url,key:DBC.key}));localStorage.setItem(GKK,DBC.gkey||'')}catch(e){}}
+function saveDBC(){try{localStorage.setItem(DBK,JSON.stringify({url:DBC.url,key:DBC.key}))}catch(e){}}
 async function rpc(fn,args){
   if(!dbRemote())return localRpc(fn,args);
   const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
@@ -2868,9 +2879,9 @@ function hideGate(){$('#gate').hidden=true;document.body.classList.remove('gate-
 function renderGate(tab,msg){
   CB.gateTab=tab;
   let f;
-  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Mulai Asesmen</button>';
-  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><button class="btn pri" data-gate="guru" id="gt-go">Login</button><p class="small muted">Hubungi admin untuk akses PIN.</p>';
-  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">Simulator Jaringan</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
+  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Masuk asesmen</button>';
+  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><button class="btn pri" data-gate="guru" id="gt-go">Masuk sebagai guru</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
+  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">Simulator Jaringan TJKT</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
   const first1=$('#gt-nama')||$('#gt-pin');if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
 }
 const gerr=m=>{const e=$('#gt-err');if(e)e.textContent=m};
@@ -2913,12 +2924,18 @@ function siswaMasuk(r,ids,token,old){
   }
   saveSW();hideGate();applyRole();startBeat();hardenOn();beat();cbOverlay();
 }
-function gateGuru(){
-  const p=(($('#gt-pin')||{}).value)||'';
-  if(Date.now()<GP_LOCK)return gerr('Terlalu banyak percobaan. Coba lagi '+Math.ceil((GP_LOCK-Date.now())/1000)+' detik lagi.');
-  if(pinHash(p)!==GP.pin){GP_FAIL++;if(GP_FAIL>=5){GP_FAIL=0;GP_LOCK=Date.now()+30000;return gerr('Terlalu banyak percobaan. Tunggu 30 detik.')}return gerr('PIN salah.')}
-  GP_FAIL=0;
-  ROLE='guru';stopBeat();hardenOff();hideGate();UI.tab='guru';applyRole();toast('Mode guru aktif.','good');
+let GG_BUSY=false;
+async function gateGuru(){
+  const p=((($('#gt-pin')||{}).value)||'').trim();
+  if(!p)return gerr('Masukkan PIN.');
+  if(GG_BUSY)return;GG_BUSY=true;const btn=$('#gt-go');if(btn){btn.disabled=true;btn.textContent='Memeriksa...'}
+  try{
+    const r=await rpc('guru_login',{p_pin:p});
+    if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah');
+    DBC.gkey=dbRemote()?r.key:'';PERAN=r.peran;PNAMA=r.nama||'';ADM.list=null;ADM.err='';
+    ROLE='guru';stopBeat();hardenOff();hideGate();UI.tab='guru';applyRole();toast('Mode guru aktif.','good');
+  }catch(e){gerr(errMsg(e.message));const i=$('#gt-pin');if(i){i.value='';i.focus()}}
+  finally{GG_BUSY=false;const b2=$('#gt-go');if(b2){b2.disabled=false;b2.textContent='Masuk sebagai guru'}}
 }
 /* ---------- detak siswa ---------- */
 function cbState(){
@@ -3034,7 +3051,6 @@ const MON={sesi:[],cur:null,data:null,timer:0,err:'',msgTo:null,busy:false};
 const fmtS=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
 async function monOpen(){
   if(ROLE!=='guru')return;
-  if(dbRemote()&&!DBC.gkey){toast('Isi kunci guru basis data di tab Guru terlebih dulu.','warn');UI.tab='guru';markTabs();renderPanel();return}
   $('#mon').hidden=false;MON.err='';monRender();
   try{await monLoadSesi();MON.err=''}catch(e){MON.err=errMsg(e.message)}
   await monPoll();clearInterval(MON.timer);MON.timer=setInterval(monPoll,4000);
@@ -3149,17 +3165,22 @@ async function saveAny(name,data,mime){
 /* ---------- kartu basis data di panel guru ---------- */
 PCH.dbf=el=>{const k=el.dataset.k;if(k in DBC)DBC[k]=String(el.value).trim()};
 PA.dbsave=async()=>{
+  if(PERAN!=='admin'){toast('Hanya admin yang dapat mengubah basis data.','warn');return}
   if(DBC.url&&!URLOK(DBC.url)){toast('Alamat harus diawali https://','bad');return}
   if((DBC.url&&!DBC.key)||(!DBC.url&&DBC.key)){toast('Isi alamat dan kunci publik (anon) sekaligus.','bad');return}
   saveDBC();
   try{
     await rpc('db_ping',{});
-    if(dbRemote()){await rpc('guru_cek',{p_key:DBC.gkey});toast('Basis data terhubung dan kunci guru benar.','good')}
+    if(dbRemote()){toast('Basis data terhubung. Masuk kembali dengan PIN agar tersambung.','good');setTimeout(exitGuru,1200);return}
     else toast('Mode uji coba aktif (satu komputer).','good');
   }catch(e){toast(errMsg(e.message),'bad')}
   renderPanel();
 };
-PA.dblocal=()=>{DBC.url='';DBC.key='';DBC.gkey='';saveDBC();toast('Kembali ke mode uji coba.','good');renderPanel()};
+PA.dblocal=()=>{if(PERAN!=='admin'){toast('Hanya admin yang dapat mengubah basis data.','warn');return}DBC.url='';DBC.key='';DBC.gkey='';saveDBC();toast('Kembali ke mode uji coba. Masuk kembali dengan PIN.','good');setTimeout(exitGuru,1200)};
+PA.dbline=async()=>{
+  const line="const DB_DEFAULT={url:'"+DBC.url+"',key:'"+DBC.key+"'};";
+  showDlg(dlgShell('Agar semua perangkat terhubung','<p class="small muted">Buka berkas <b>index.html</b> di repositori GitHub, cari baris yang diawali <span class="mono">const DB_DEFAULT</span>, ganti seluruh baris itu dengan teks di bawah, lalu simpan (commit). Setelah itu semua browser dan perangkat, termasuk milik guru lain dan siswa, otomatis terhubung tanpa tautan khusus. Aman dibagikan: hanya berisi alamat dan kunci publik.</p><textarea id="iotxt" rows="4" readonly>'+esc(line)+'</textarea>'),true);
+};
 PA.dbcopy=async()=>{
   if(!dbRemote()){toast('Isi basis data Supabase dulu. Mode uji coba tidak lintas komputer.','warn');return}
   const link=location.origin+location.pathname+'#cfg='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({u:DBC.url,k:DBC.key})))));
@@ -3168,9 +3189,39 @@ PA.dbcopy=async()=>{
 PA.dbguide=()=>showDlg(dlgShell('Panduan memasang basis data',
   '<ol class="small" style="padding-left:18px;display:flex;flex-direction:column;gap:6px"><li>Buat akun gratis di supabase.com, lalu buat <b>New project</b>.</li><li>Buka <b>SQL Editor</b>, tempel isi berkas <span class="mono">supabase_setup.sql</span>, <b>ganti</b> teks <span class="mono">GANTI-KUNCI-GURU-INI-DENGAN-ACAK</span> dengan kunci rahasia panjang (minimal 16 karakter), lalu tekan Run. Harus muncul <i>Success</i>. Bila muncul tulisan merah, ada yang salah, kirimkan ke saya.</li><li>Buka <b>Project Settings, API Keys</b>. Salin <b>Project URL</b> dan kunci <b>publishable</b> (atau <b>anon</b>). Jangan salin kunci secret atau service_role.</li><li>Tempel keduanya di kartu Basis data pada tab Guru, isi juga kunci guru yang tadi Anda buat, lalu tekan <b>Simpan dan uji</b>.</li><li>Tekan <b>Salin tautan siswa</b> dan bagikan. Tautan itu menyimpan alamat dan kunci publik di komputer siswa.</li><li>Buka <b>Ruang Pantau</b>, buat sesi baru, lalu bagikan token ke siswa.</li></ol><p class="small muted">Kunci publik memang terlihat siswa. Keamanan ada pada fungsi basis data: tabel tertutup, dan semua aksi guru memerlukan kunci guru. Jangan membagikan kunci guru.</p>'));
 function dbCard(){
-  const rem=dbRemote();
-  return '<div class="card"><h3>Ruang pantau dan basis data</h3><div class="row"><span class="pill '+(rem?'good':'warn')+'">'+(rem?'Supabase terhubung':'Mode uji coba (satu komputer)')+'</span></div><div class="fld" style="margin-top:8px"><label for="db-url">Project URL Supabase</label><input id="db-url" data-in="dbf" data-ch="dbf" data-k="url" value="'+esc(DBC.url)+'" placeholder="https://xxxx.supabase.co" autocomplete="off"></div><div class="fld"><label for="db-key">Anon public key</label><input id="db-key" data-in="dbf" data-ch="dbf" data-k="key" value="'+esc(DBC.key)+'" autocomplete="off"></div><div class="fld"><label for="db-gk">Kunci guru basis data (rahasia)</label><input id="db-gk" type="password" data-in="dbf" data-ch="dbf" data-k="gkey" value="'+esc(DBC.gkey)+'" autocomplete="off"></div><div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="dbsave">Simpan dan uji</button><button class="btn sm" data-act="dbcopy">Salin tautan siswa</button><button class="btn sm" data-act="dbguide">Panduan</button><button class="btn sm" data-act="dblocal">Mode uji coba</button></div><div class="row" style="margin-top:10px"><button class="btn pri" data-act="monopen">Buka Ruang Pantau</button></div></div>';
+  const rem=dbRemote(),adm=PERAN==='admin';
+  let h='<div class="card"><h3>Ruang pantau dan basis data</h3><div class="row"><span class="pill '+(rem?'good':'warn')+'">'+(rem?'Supabase terhubung':'Mode uji coba (satu komputer)')+'</span></div>';
+  if(!rem&&adm)h+='<p class="small" style="margin:8px 0 0">Mode ini hanya berlaku di browser ini. Isi data Supabase di bawah agar guru dan siswa di perangkat mana pun terhubung.</p>';
+  if(adm)h+='<div class="fld" style="margin-top:8px"><label for="db-url">Project URL Supabase</label><input id="db-url" data-in="dbf" data-ch="dbf" data-k="url" value="'+esc(DBC.url)+'" placeholder="https://xxxx.supabase.co" autocomplete="off"></div><div class="fld"><label for="db-key">Anon public key</label><input id="db-key" data-in="dbf" data-ch="dbf" data-k="key" value="'+esc(DBC.key)+'" autocomplete="off"></div><div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="dbsave">Simpan dan uji</button>'+(rem?'<button class="btn sm" data-act="dbline">Pasang untuk semua perangkat</button>':'')+'<button class="btn sm" data-act="dbcopy">Salin tautan siswa</button><button class="btn sm" data-act="dbguide">Panduan</button><button class="btn sm" data-act="dblocal">Mode uji coba</button></div>';
+  h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="monopen">Buka Ruang Pantau</button></div></div>';
+  return h;
 }
+/* ---------- kelola akun guru (admin) ---------- */
+const ADM={list:null,err:'',busy:false};
+async function admLoad(){
+  if(ADM.busy||PERAN!=='admin')return;ADM.busy=true;
+  try{ADM.list=await rpc('admin_guru_daftar',{p_key:gk()});ADM.err=''}catch(e){ADM.err=errMsg(e.message);ADM.list=[]}
+  ADM.busy=false;if(ROLE==='guru'&&UI.tab==='guru')renderPanel();
+}
+const fmtTgl=ms=>ms?new Date(ms).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'belum pernah';
+function guruCard(){
+  if(ADM.list===null)setTimeout(admLoad,0);
+  let h='<div class="card" id="adm-card"><h3>Akun guru lain</h3><p class="small muted">Anda admin. Buat PIN acak untuk setiap guru lain; PIN berlaku di semua browser dan perangkat. Hanya Anda yang dapat membuatnya.</p>';
+  if(ADM.err)h+='<p class="small" style="color:var(--bad)" role="alert">'+esc(ADM.err)+'</p>';
+  if(!dbRemote())h+='<p class="small" style="color:var(--warn,#a15c00)">Basis data Supabase belum terhubung. Akun guru di mode uji coba hanya ada di browser ini.</p>';
+  if(ADM.list===null)h+='<p class="small muted">Memuat...</p>';
+  else if(!ADM.list.length)h+='<p class="small muted">Belum ada guru lain.</p>';
+  else h+='<div class="tw"><table class="mt"><thead><tr><th>Nama</th><th>Status</th><th>Terakhir masuk</th><th></th></tr></thead><tbody>'+ADM.list.map(g=>'<tr><td><b>'+esc(g.nama)+'</b></td><td><span class="pill '+(g.aktif?'good':'warn')+'">'+(g.aktif?'Aktif':'Nonaktif')+'</span></td><td class="small">'+fmtTgl(g.terakhir)+'</td><td><div class="row" style="flex-wrap:wrap;gap:4px"><button class="btn sm" data-act="admreset" data-id="'+esc(g.id)+'">PIN baru</button><button class="btn sm" data-act="admtog" data-id="'+esc(g.id)+'" data-on="'+(g.aktif?1:0)+'">'+(g.aktif?'Nonaktifkan':'Aktifkan')+'</button><button class="btn sm bad" data-act="admdel" data-id="'+esc(g.id)+'">Hapus</button></div></td></tr>').join('')+'</tbody></table></div>';
+  h+='<div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="admnew">Tambah guru</button><button class="btn sm" data-act="gpchpin">Ganti PIN admin</button></div></div>';
+  return h;
+}
+function admShowPin(r,judul){
+  showDlg(dlgShell(judul,'<p class="small">PIN untuk <b>'+esc(r.nama)+'</b>. Catat dan berikan sekarang; PIN tidak dapat dilihat lagi (bisa dibuat ulang dengan tombol PIN baru).</p><div style="font-size:34px;font-weight:700;letter-spacing:.25em;text-align:center;padding:12px 0" class="mono" id="adm-pin">'+esc(r.pin)+'</div><div class="row"><button class="btn sm" data-g="admcopy">Salin PIN</button><button class="btn pri sm" data-g="close">Selesai</button></div>'),true);
+}
+PA.admnew=()=>showDlg(dlgShell('Tambah guru','<div class="fld"><label for="adm-nama">Nama guru</label><input id="adm-nama" maxlength="60" autocomplete="off"></div><p class="small" id="adm-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="admbuat">Buat PIN acak</button></div>'),true);
+PA.admreset=b=>cbConfirm('Buat PIN baru untuk guru ini? PIN lama berhenti berlaku dan guru yang sedang masuk perlu masuk ulang.',async()=>{try{const r=await rpc('admin_guru_reset',{p_key:gk(),p_id:b.dataset.id});admShowPin(r,'PIN baru');ADM.list=null;admLoad()}catch(e){toast(errMsg(e.message),'bad')}},'Ya, buat PIN baru');
+PA.admtog=async b=>{try{await rpc('admin_guru_ubah',{p_key:gk(),p_id:b.dataset.id,p_aktif:b.dataset.on!=='1'});ADM.list=null;admLoad()}catch(e){toast(errMsg(e.message),'bad')}};
+PA.admdel=b=>cbConfirm('Hapus akun guru ini? Akses guru itu langsung berhenti.',async()=>{try{await rpc('admin_guru_hapus',{p_key:gk(),p_id:b.dataset.id});toast('Akun guru dihapus.','good');ADM.list=null;admLoad()}catch(e){toast(errMsg(e.message),'bad')}},'Ya, hapus');
 PA.monopen=monOpen;
 /* ---------- penghubung ---------- */
 function cbBind(){
@@ -3180,6 +3231,16 @@ function cbBind(){
   });
   $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
   $('#gate').addEventListener('input',e=>{if(e.target.id==='gt-token'||e.target.id==='gt-kelas')e.target.value=e.target.value.toUpperCase()});
+  $('#dlg').addEventListener('click',async e=>{
+    const t=e.target.closest('[data-g]');if(!t)return;
+    if(t.dataset.g==='admbuat'){
+      const nm=(($('#adm-nama')||{}).value||'').trim(),er=$('#adm-err');
+      if(nm.length<3){er.textContent='Nama minimal 3 huruf.';return}
+      try{const r=await rpc('admin_guru_buat',{p_key:gk(),p_nama:nm});admShowPin(r,'Guru ditambahkan');ADM.list=null;admLoad()}catch(x){er.textContent=errMsg(x.message)}
+    }else if(t.dataset.g==='admcopy'){
+      const v=($('#adm-pin')||{}).textContent||'';try{navigator.clipboard.writeText(v).then(()=>toast('PIN disalin.','good'),()=>toast('Salin manual: '+v,'warn'))}catch(x){toast('Salin manual: '+v,'warn')}
+    }
+  });
   $('#lockov').addEventListener('click',e=>{if(e.target.closest('[data-lk="fs"]')){try{document.documentElement.requestFullscreen().then(cbOverlay).catch(()=>toast('Layar penuh tidak didukung browser ini.','warn'))}catch(x){}}});
   $('#cbmsg').addEventListener('click',e=>{if(e.target.closest('[data-lk="msgok"]')){$('#cbmsg').hidden=true}});
   $('#mon').addEventListener('click',e=>{
