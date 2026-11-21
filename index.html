@@ -148,7 +148,7 @@ details.acc summary{padding:8px 12px;cursor:pointer;font-weight:600;list-style-p
 details.acc .in{padding:0 12px 10px;display:flex;flex-direction:column;gap:8px}
 .fld{display:flex;flex-direction:column;gap:3px;min-width:0}
 .fld label{font-size:12px;color:var(--muted)}
-input[type=text],input[type=number],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;min-width:0;width:100%}
+input[type=text],input:not([type]),input[type=password],input[type=number],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px;min-width:0;width:100%}
 textarea{font-family:var(--ff-mono);font-size:12px;resize:vertical}
 input.err{border-color:var(--bad);background:var(--bad-soft)}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -205,6 +205,31 @@ input.err{border-color:var(--bad);background:var(--bad-soft)}
   .g2,.g3{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- CBT ---- */
+[hidden]{display:none!important}
+#gate{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+#gate[hidden],#mon[hidden],#lockov[hidden],#cbmsg[hidden]{display:none!important}
+.gcard{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.18);overflow:hidden}
+.gh{padding:18px 20px 10px}.gtabs{display:flex;border-bottom:1px solid var(--line);padding:0 12px}
+.gtabs button{flex:1;padding:10px;border:0;background:none;border-bottom:3px solid transparent;font-weight:600;color:var(--muted)}
+.gtabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.gb{padding:14px 20px;display:flex;flex-direction:column;gap:10px}.gdb{padding:10px 20px 14px;border-top:1px solid var(--line);background:var(--surface2)}
+#mon{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column}
+.mh{display:flex;gap:8px;align-items:center;padding:10px max(16px,env(safe-area-inset-left,0px));background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.mb{flex:1;overflow:auto;padding:12px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px}
+.mer{background:var(--bad-soft);color:var(--bad);padding:8px 16px;font-size:13px}
+.tok{font:700 22px var(--ff-mono);letter-spacing:.18em;background:var(--accent-soft);padding:2px 10px;border-radius:8px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.stats div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column}
+.stats b{font:700 22px var(--ff-head)}.stats span{font-size:12px;color:var(--muted)}
+.tw{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table.mt{min-width:860px}table.mt td.act{white-space:nowrap}table.mt .btn.sm{min-height:26px;padding:2px 7px;font-size:12px;margin-right:3px}
+.st-good{background:var(--good-soft);color:var(--good)}.st-bad{background:var(--bad-soft);color:var(--bad)}.st-acc{background:var(--accent-soft);color:var(--accent)}.st-mute{color:var(--muted)}
+#lockov{position:fixed;inset:0;z-index:75;background:rgba(8,14,22,.94);display:flex;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center}
+.lkc{max-width:420px;display:flex;flex-direction:column;gap:10px;align-items:center}.lkc h2{margin:0}.lkc p{margin:0;opacity:.9}
+#cbmsg{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:76;width:min(460px,calc(100% - 24px));background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.role-siswa #tabs,.gate-on #app{display:none}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 <input type="file" id="as-file" accept=".json,application/json" hidden>
 <div id="app">
@@ -214,7 +239,10 @@ input.err{border-color:var(--bad);background:var(--bad-soft)}
       <div><h1>Simulator Jaringan TJKT</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
     </div>
     <span class="pill warn" id="as-badge" hidden></span>
+    <span class="pill bad" id="net-badge" hidden>Terputus</span>
     <div class="tb" role="toolbar" aria-label="Berkas dan pengaturan">
+      <button class="btn" id="b-mon" title="Ruang Pantau" hidden>📡 <span class="lb">Pantau</span></button>
+      <button class="btn" id="b-role" title="Mode guru (PIN)">🔑 <span class="lb">Guru</span></button>
       <button class="btn" id="b-undo" title="Urungkan (Ctrl+Z)">↶ <span class="lb">Urungkan</span></button>
       <button class="btn" id="b-redo" title="Ulangi (Ctrl+Y)">↷ <span class="lb">Ulangi</span></button>
       <button class="btn" id="b-copy" title="Salin proyek sebagai teks JSON">⧉ <span class="lb">Salin proyek</span></button>
@@ -260,6 +288,7 @@ input.err{border-color:var(--bad);background:var(--bad-soft)}
         <button data-tab="info">Info</button>
         <button data-tab="sim">Simulasi</button>
         <button data-tab="ases">Asesmen</button>
+        <button data-tab="guru" hidden>Guru</button>
       </div>
       <div id="panel"></div>
     </aside>
@@ -267,6 +296,10 @@ input.err{border-color:var(--bad);background:var(--bad-soft)}
 </div>
 <div class="ov" id="ov" hidden><div class="dlg" id="dlg" role="dialog" aria-modal="true"></div></div>
 <div id="toast" aria-live="polite"></div>
+<div id="gate" hidden></div>
+<div id="mon" hidden></div>
+<div id="lockov" hidden></div>
+<div id="cbmsg" hidden></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 'use strict';
@@ -337,7 +370,7 @@ function connectPorts(cable,a,b){
   if(!da||!db)return{ok:false,msg:'Perangkat tidak ditemukan.'};
   if(da.id===db.id)return{ok:false,msg:'Kabel tidak bisa menghubungkan perangkat ke dirinya sendiri.'};
   const pa=da.ports.find(p=>p.n===a.port),pb=db.ports.find(p=>p.n===b.port);
-  if(!pa||!pb)return{ok:false,msg:'Port tidak tersedia.'};
+  if(!pa||!pb)return{ok:false,msg:'Port tidak ada.'};
   const media=CABLES[cable].media;
   for(const [d,p] of [[da,pa],[db,pb]]){
     if(p.m!==media)return{ok:false,mistake:1,msg:CABLES[cable].label+' tidak cocok dengan '+short(p.n)+' di '+d.name+': itu '+MEDIA_NAME[p.m]+', sedangkan kabel ini untuk '+MEDIA_NAME[media]+'.'};
@@ -1282,7 +1315,7 @@ function animatePath(ids,ok,failAt){
 /* ================= MODAL PERANGKAT ================= */
 function closeDlg(){$('#ov').hidden=true;UI.modal=null;$('#dlg').className='dlg'}
 function tabsFor(d){
-  if(d.type==='switch'||d.type==='router')return[['phys','Fisik'],['cfg','Konfigurasi'],['cli','CLI']];
+  if(d.type==='switch'||d.type==='router')return[['phys','Fisik'],['cfg','Konfigurasi']].concat((typeof ROLE!=='undefined'&&AS.phase==='run'&&ROLE!=='guru'&&!GP.allowCLI)?[]:[['cli','CLI']]);
   if(d.type==='ap'||d.type==='printer')return[['phys','Fisik'],['cfg','Konfigurasi']];
   return[['phys','Fisik'],['cfg','Konfigurasi'],['desk','Desktop']];
 }
@@ -1477,7 +1510,7 @@ function markTabs(){$$('#tabs button').forEach(b=>b.classList.toggle('on',b.data
 let lastTab='';
 function renderPanel(){
   const p=$('#panel');if(!p)return;
-  const f={act:typeof panelAct==='function'?panelAct:()=>'',flow:typeof panelFlow==='function'?panelFlow:()=>'',info:typeof panelInfo==='function'?panelInfo:()=>'',sim:panelSim,ases:typeof panelAses==='function'?panelAses:()=>''}[UI.tab];
+  const f={act:typeof panelAct==='function'?panelAct:()=>'',flow:typeof panelFlow==='function'?panelFlow:()=>'',info:typeof panelInfo==='function'?panelInfo:()=>'',sim:panelSim,ases:typeof panelAses==='function'?panelAses:()=>'',guru:typeof panelGuru==='function'?panelGuru:()=>''}[UI.tab];
   const st=lastTab===UI.tab?p.scrollTop:0;
   const focused=document.activeElement&&p.contains(document.activeElement)&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   if(focused)return;
@@ -1569,6 +1602,7 @@ function bindGlobal(){
   window.addEventListener('resize',()=>{if(UI.view==='3d'&&window.resize3D)resize3D()});
 }
 function setView(v){
+  if(v==='3d'&&typeof ROLE!=='undefined'&&AS.phase==='run'&&ROLE!=='guru'&&!GP.allow3D){toast('Tampilan 3D dinonaktifkan guru selama asesmen.','warn');return}
   UI.view=v;
   $$('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
   $('#svg').hidden=v==='3d';$('#v3d').hidden=v!=='3d';
@@ -1975,7 +2009,7 @@ function bindPanelExtras(){
 const AS_KEY='tjkt-asesmen-v1',AS_SALT='tjkt-asesmen-2026';
 const AS={phase:'idle',id:{sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',nama:'',kelas:'',absen:'',nis:'',paket:'auto',durasi:90},
   start:0,end:0,notes:{tujuan:'',kebutuhan:'',topologi:'',ip:'',kendala:'',kesimpulan:''},checks:0,lastCheck:null,tests:[],webBy:[],agree:false,result:null,err:'',saved:{pdf:false,json:false},over:false};
-const AS_MAXCHK=3;
+let ROLE='tamu';
 const NAMEPFX={pc:'PC',laptop:'LPT',server:'SRV',printer:'PRN',switch:'SW',router:'RTR',ap:'AP'};
 const NOTE_FIELDS=[
   ['tujuan','Rancang: tujuan jaringan','Untuk apa jaringan ini dibangun dan siapa penggunanya?'],
@@ -1991,14 +2025,14 @@ function loadAses(){
     const o=JSON.parse(localStorage.getItem(AS_KEY)||'null');if(!o)return;
     AS.phase=['idle','run','done'].includes(o.phase)?o.phase:'idle';
     if(o.id)for(const k of Object.keys(AS.id))if(o.id[k]!=null)AS.id[k]=o.id[k];
-    AS.start=+o.start||0;AS.end=+o.end||0;AS.checks=clamp(+o.checks||0,0,AS_MAXCHK);
+    AS.start=+o.start||0;AS.end=+o.end||0;AS.checks=clamp(+o.checks||0,0,GP.maxCek);
     if(o.notes)for(const k of Object.keys(AS.notes))AS.notes[k]=str(o.notes[k],2000);
     AS.tests=Array.isArray(o.tests)?o.tests.slice(0,60):[];AS.webBy=Array.isArray(o.webBy)?o.webBy.slice(0,10):[];
     AS.agree=!!o.agree;AS.result=o.result&&typeof o.result==='object'?o.result:null;AS.over=!!o.over;
     if(AS.phase==='done'&&!AS.result)AS.phase='idle';
   }catch(e){}
 }
-const asesActive=()=>AS.phase==='run';
+const asesActive=()=>AS.phase==='run'&&ROLE!=='guru';
 function asesX(){return parseInt(AS.id.absen)||0}
 function asesPaket(){
   const p=AS.id.paket;if(['A','B','C','D'].includes(p))return p;
@@ -2152,7 +2186,7 @@ function asesLeft(){return AS.id.durasi*60000-(Date.now()-AS.start)}
 function fmtT(ms){const s=Math.max(0,Math.floor(ms/1000));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function asesTick(){
   const b=$('#as-badge');
-  if(asesActive()){
+  if(AS.phase==='run'){
     const left=asesLeft();
     if(b){b.hidden=false;b.textContent='Asesmen '+(left>=0?fmtT(left):'lewat '+fmtT(-left))}
     const t=$('#as-timer');if(t){t.textContent=left>=0?fmtT(left):'Waktu habis, lewat '+fmtT(-left);t.style.color=left<0?'var(--bad)':(left<600000?'var(--warn)':'')}
@@ -2170,40 +2204,41 @@ function panelAses(){
 function asIdle(){
   let h='<div class="card"><h3>Asesmen praktik akhir semester</h3><p class="small">Kerjakan satu proyek jaringan dari awal sampai akhir, mengikuti enam tahap alur kerja: rancang, pasang perangkat, pasang kabel, konfigurasi, uji, dokumentasi. Hasilnya disimpan sebagai berkas untuk diunggah ke Google Classroom.</p><ul class="small" style="margin:6px 0 0;padding-left:18px"><li>Kanvas dikosongkan saat asesmen dimulai.</li><li>Templat, aktivitas, dan diagnosa otomatis dikunci selama asesmen.</li><li>Tab Info tetap boleh dipakai sebagai referensi.</li></ul></div>';
   h+='<div class="card"><h3>Identitas siswa</h3><div class="g2">'+ASF('nama','Nama lengkap','text','maxlength="60"')+ASF('kelas','Kelas','text','maxlength="20" placeholder="X TJKT 1"')+ASF('absen','Nomor absen','number','min="1" max="99"')+ASF('nis','NIS (opsional)','text','maxlength="20"')+'</div>';
-  h+='<details class="acc" style="margin-top:8px"><summary>Pengaturan guru</summary><div class="in"><div class="g2">'+ASF('sekolah','Sekolah','text','maxlength="60"')+ASF('mapel','Mata pelajaran','text','maxlength="60"')+'</div><div class="g2">'+'<div class="fld"><label for="asf-paket">Paket soal</label><select id="asf-paket" data-ch="asf" data-k="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A: lab komputer'],['B','B: kabel dan nirkabel'],['C','C: dua gedung dan router (pengayaan)'],['D','D: VLAN (pengayaan)']].map(o=>'<option value="'+o[0]+'" '+(AS.id.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+ASF('durasi','Durasi (menit)','number','min="30" max="180"')+'</div></div></details>';
+  h+='<p class="small muted" style="margin:8px 0 0">Paket: '+(GP.paket==='auto'?'ditentukan dari nomor absen':'Paket '+GP.paket)+' · waktu '+GP.durasi+' menit · Cek mandiri '+GP.maxCek+' kali.</p>';
   if(AS.err)h+='<p class="small" style="color:var(--bad);margin:8px 0 0" role="alert">'+esc(AS.err)+'</p>';
   h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="asstart">Mulai asesmen</button></div></div>';
-  h+='<div class="card"><h3>Untuk guru</h3><p class="small muted">Muat berkas JSON dari siswa untuk melihat jaringannya dan menghitung ulang skor otomatis. Kanvas akan diganti dengan proyek siswa.</p><button class="btn sm" data-act="asverify">Periksa berkas siswa</button></div>';
   return h;
 }
 function asRun(){
   const x=asesX(),p=asesPaket(),info=paketInfo(p,x);
   let h='<div class="card"><div class="row" style="justify-content:space-between"><b>Sisa waktu</b><span class="pill">Paket '+p+'</span></div><div id="as-timer" style="font:600 26px var(--ff-head)">'+fmtT(asesLeft())+'</div><div class="bar" style="margin:6px 0"><i id="as-bar" style="width:0"></i></div><div class="small muted">'+esc(AS.id.nama)+' · '+esc(AS.id.kelas)+' · absen '+esc(AS.id.absen)+'</div></div>';
   h+='<div class="card"><h3>'+esc(info.title)+' <span class="pill">'+esc(info.tingkat)+'</span></h3><p class="small">'+esc(info.skenario)+'</p><b class="small">Ketentuan</b><ul class="small" style="margin:4px 0 8px;padding-left:18px">'+info.ketentuan.map(k=>'<li>'+esc(k)+'</li>').join('')+'</ul><b class="small">Tugas</b><ol class="flow" style="margin-top:6px">'+info.tugas.map(t=>'<li><b>'+esc(t[0])+'</b><span class="small">'+esc(t[1])+'</span></li>').join('')+'</ol></div>';
-  h+='<div class="card"><h3>Cek mandiri</h3><p class="small muted">Menampilkan butir yang sudah sesuai tanpa petunjuk perbaikan. Tersisa '+(AS_MAXCHK-AS.checks)+' dari '+AS_MAXCHK+' kali.</p><button class="btn sm" data-act="ascheck" '+(AS.checks>=AS_MAXCHK?'disabled':'')+'>Cek pekerjaan saya</button>';
+  h+='<div class="card"><h3>Cek mandiri</h3><p class="small muted">Menampilkan butir yang sudah sesuai tanpa petunjuk perbaikan. Tersisa '+(GP.maxCek-AS.checks)+' dari '+GP.maxCek+' kali.</p><button class="btn sm" data-act="ascheck" '+(AS.checks>=GP.maxCek?'disabled':'')+'>Cek pekerjaan saya</button>';
   if(AS.lastCheck)h+='<ul class="ck" style="margin-top:8px">'+AS.lastCheck.map(g=>'<li class="'+(g.pass===g.n?'ok':'bad')+'"><span class="m">'+(g.pass===g.n?'✓':'!')+'</span><span style="min-width:0"><b>'+esc(g.label)+'</b><span class="small muted">'+g.pass+' dari '+g.n+' butir sesuai</span></span></li>').join('')+'</ul>';
   h+='</div>';
   h+='<div class="card"><h3>Jawaban tertulis</h3><p class="small muted">Dinilai guru (30 poin). Tersimpan otomatis.</p>'+NOTE_FIELDS.map(f=>'<div class="fld" style="margin-top:8px"><label for="asn-'+f[0]+'">'+esc(f[1])+'</label><textarea id="asn-'+f[0]+'" rows="3" maxlength="1500" data-in="asn" data-k="'+f[0]+'" placeholder="'+esc(f[2])+'">'+esc(AS.notes[f[0]])+'</textarea></div>').join('')+'</div>';
   h+='<div class="card"><h3>Selesai</h3><label class="row" style="align-items:flex-start"><input type="checkbox" data-ch="asagree" '+(AS.agree?'checked':'')+' id="as-agree"> <span class="small">Saya menyatakan pekerjaan ini hasil kerja saya sendiri.</span></label>';
   if(AS.err)h+='<p class="small" style="color:var(--bad);margin:8px 0 0" role="alert">'+esc(AS.err)+'</p>';
-  h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="asfinish">Selesai dan simpan</button><button class="btn sm bad" data-act="asabort">Batalkan asesmen</button></div></div>';
+  h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="asfinish">Selesai dan simpan</button>'+(ROLE==='siswa'?'':'<button class="btn sm bad" data-act="asabort">Batalkan asesmen</button>')+'</div></div>';
   return h;
 }
 function asDone(){
   const r=AS.result,sv=AS.saved;
-  let h='<div class="card" style="border-color:var(--good)"><h3>Asesmen selesai</h3><p style="font:600 28px var(--ff-head);margin:2px 0">'+fmt1(r.skor.otomatis)+' <span class="muted" style="font-size:15px">dari 70 (otomatis)</span></p><p class="small muted">Nilai 30 poin sisanya diberikan guru setelah membaca laporan. Kode verifikasi: <span class="mono">'+esc(r.kode)+'</span></p>';
+  let h=(typeof cbSendCard==='function'?cbSendCard():'')+'<div class="card" style="border-color:var(--good)"><h3>Asesmen selesai</h3><p style="font:600 28px var(--ff-head);margin:2px 0">'+fmt1(r.skor.otomatis)+' <span class="muted" style="font-size:15px">dari 70 (otomatis)</span></p><p class="small muted">Nilai 30 poin sisanya diberikan guru setelah membaca laporan. Kode verifikasi: <span class="mono">'+esc(r.kode)+'</span></p>';
   h+='<div class="row"><button class="btn pri" data-act="assavepdf">'+(sv.pdf?'✓ ':'')+'Simpan laporan PDF</button><button class="btn pri" data-act="assavejson">'+(sv.json?'✓ ':'')+'Simpan berkas proyek (JSON)</button></div>';
   h+='<p class="small" id="as-dlmsg" style="margin:8px 0 0"></p></div>';
   h+='<div class="card"><h3>Mengunggah ke Google Classroom</h3><ol class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>Simpan kedua berkas dengan tombol di atas.</li><li>Buka tugas asesmen di Google Classroom.</li><li>Pilih Tambahkan atau buat, lalu File, dan pilih kedua berkas.</li><li>Tekan Serahkan.</li></ol></div>';
-  h+='<div class="card"><h3>Nilai Asesmen</h3><table class="t">'+r.skor.kelompok.map(g=>'<tr><td>'+esc(g.label)+'</td><td style="text-align:right" class="mono">'+fmt1(g.poin)+' / '+g.maks+'</td></tr>').join('')+'</table></div>';
-  h+='<div class="row"><button class="btn sm bad" data-act="asredo">Ulangi asesmen</button></div>';
+  h+='<div class="card"><h3>Rincian nilai otomatis</h3><table class="t">'+r.skor.kelompok.map(g=>'<tr><td>'+esc(g.label)+'</td><td style="text-align:right" class="mono">'+fmt1(g.poin)+' / '+g.maks+'</td></tr>').join('')+'</table></div>';
+  if(ROLE!=='siswa')h+='<div class="row"><button class="btn sm bad" data-act="asredo">Ulangi asesmen</button></div>';
   return h;
 }
 /* ---------- aksi ---------- */
 function asValidate(){
+  AS.id.sekolah=GP.sekolah;AS.id.mapel=GP.mapel;AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;
   const i=AS.id,a=parseInt(i.absen),d=parseInt(i.durasi);
   if(String(i.nama).trim().length<3)return 'Isi nama lengkap (minimal 3 huruf).';
   if(!String(i.kelas).trim())return 'Isi kelas, misalnya X TJKT 1.';
+  if(GP.reqNIS&&String(i.nis).trim().length<4)return 'Isi NIS.';
   if(!(a>=1&&a<=99))return 'Nomor absen harus antara 1 dan 99.';
   if(!(d>=30&&d<=180))return 'Durasi harus antara 30 dan 180 menit.';
   return '';
@@ -2211,7 +2246,7 @@ function asValidate(){
 PA.asstart=()=>{
   AS.err=asValidate();
   if(AS.err){renderPanel();return}
-  AS.id.nama=String(AS.id.nama).trim();AS.id.kelas=String(AS.id.kelas).trim();AS.id.absen=parseInt(AS.id.absen);AS.id.durasi=parseInt(AS.id.durasi);
+  AS.id.nama=String(AS.id.nama).trim();AS.id.nis=String(AS.id.nis).trim();AS.id.kelas=String(AS.id.kelas).trim();AS.id.absen=parseInt(AS.id.absen);AS.id.durasi=parseInt(AS.id.durasi);
   pushUndo();resetState();S.settings.strict=true;
   P.cur=null;saveProfile();UI.sel=null;UI.events=[];UI.diag=null;
   AS.phase='run';AS.start=Date.now();AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
@@ -2221,7 +2256,7 @@ PA.asstart=()=>{
   toast('Asesmen dimulai. Selamat bekerja.','good');
 };
 PA.ascheck=()=>{
-  if(AS.checks>=AS_MAXCHK)return;
+  if(AS.checks>=GP.maxCek)return;
   const ev=evalAses(asesCtx());AS.checks++;
   AS.lastCheck=ev.groups.filter(g=>g.items.length).map(g=>({label:g.label,n:g.items.length,pass:g.items.filter(i=>i.f>=0.999).length}));
   saveAses();renderPanel();
@@ -2268,7 +2303,14 @@ function asDlgActions(){
 }
 /* ================= LAPORAN PDF, BERKAS JSON, VERIFIKASI ================= */
 function fnv(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h.toString(16).padStart(8,'0').toUpperCase()}
-function codeFor(o){return fnv(JSON.stringify([o.nama,o.kelas,o.absen,o.paket,o.mulai,o.selesai,Math.round(o.otomatis*100),o.notes,o.tests,o.proyek])+AS_SALT)}
+function canon(v){return Array.isArray(v)?'['+v.map(canon).join(',')+']':(v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}':JSON.stringify(v===undefined?null:v))}
+function codeFor(o,legacy){
+  const pr=typeof o.proyek==='string'?o.proyek:JSON.stringify(o.proyek);
+  const arr=[o.nama,o.kelas,o.absen,o.paket,o.mulai,o.selesai,Math.round(o.otomatis*100),o.notes,o.tests];
+  if(legacy)return fnv(JSON.stringify(arr.concat([pr]))+AS_SALT);
+  let po;try{po=JSON.parse(pr)}catch(e){po=pr}
+  return fnv(canon(arr.concat([po]))+AS_SALT);
+}
 function buildCore(ev){
   const proyek=serialize();
   const skor={otomatis:ev.total,maks:70,kelompok:ev.groups.map(g=>({key:g.key,label:g.label,maks:g.max,poin:g.earned,butir:g.items.map(i=>({t:i.t,w:i.w,f:Math.round(i.f*1000)/1000}))}))};
@@ -2501,7 +2543,7 @@ async function asSave(kind){
 PA.assavepdf=()=>asSave('pdf');
 PA.assavejson=()=>asSave('json');
 PA.asverify=()=>{
-  if(asesActive()){toast('Selesaikan atau batalkan asesmen yang sedang berjalan dulu.','warn');return}
+  if(AS.phase==='run'){toast('Selesaikan atau batalkan asesmen yang sedang berjalan dulu.','warn');return}
   const f=$('#as-file');if(f)f.click();
 };
 /* ---------- verifikasi berkas siswa (guru) ---------- */
@@ -2509,6 +2551,9 @@ const GURU=[['g1','Rancangan',10],['g2','Analisis pengujian dan kendala',8],['g3
 async function verifyFile(file){
   let txt;try{txt=await file.text()}catch(e){toast('Berkas tidak bisa dibaca.','bad');return}
   let o;try{o=JSON.parse(txt)}catch(e){toast('Berkas bukan JSON yang valid.','bad');return}
+  verifyObj(o);
+}
+function verifyObj(o){
   if(!o||o.format!=='tjkt-asesmen-v1'||!o.identitas||!o.proyek||!o.skor||!Array.isArray(o.skor.kelompok)){toast('Ini bukan berkas asesmen dari simulator ini.','bad');return}
   const id=o.identitas,notes=o.jawaban||{},tests=Array.isArray(o.bukti)?o.bukti:[],w=o.waktu||{};
   const kode=codeFor({nama:id.nama,kelas:id.kelas,absen:id.absen,paket:o.paket,mulai:w.mulai,selesai:w.selesai,otomatis:o.skor.otomatis,notes,tests,proyek:JSON.stringify(o.proyek)});
@@ -2518,7 +2563,7 @@ async function verifyFile(file){
   UI.sel=null;afterChange();fitView();
   const ev=evalAses({x:parseInt(o.x)||0,paket:o.paket,nama:id.nama,tests,webBy:Array.isArray(o.webBy)?o.webBy:[]});
   AS.vtotal=ev.total;
-  const utuh=kode===o.kode,sama=Math.abs(ev.total-o.skor.otomatis)<0.06;
+  const utuh=kode===o.kode||codeFor({nama:id.nama,kelas:id.kelas,absen:id.absen,paket:o.paket,mulai:w.mulai,selesai:w.selesai,otomatis:o.skor.otomatis,notes,tests,proyek:JSON.stringify(o.proyek)},true)===o.kode,sama=Math.abs(ev.total-o.skor.otomatis)<0.06;
   const info=paketInfo(o.paket,parseInt(o.x)||0)||{title:'-'};
   const used=w.selesai&&w.mulai?Math.round((w.selesai-w.mulai)/60000):null;
   let h='<div class="row"><span class="pill '+(utuh?'good':'bad')+'">'+(utuh?'Kode verifikasi cocok':'Isi berkas berubah')+'</span><span class="pill '+(sama?'good':'bad')+'">'+(sama?'Skor hitung ulang sama':'Skor hitung ulang berbeda')+'</span></div>';
@@ -2535,11 +2580,634 @@ function asVerifyTotal(){
 }
 /* ---------- inisialisasi ---------- */
 function asesInit(){
-  loadAses();
-  asDlgActions();
+  loadGP();loadAses();
+  asDlgActions();gpDialog();
+  const rb=$('#b-role');if(rb)rb.onclick=exitGuru;
   const f=$('#as-file');if(f)f.addEventListener('change',e=>{const fl=e.target.files&&e.target.files[0];e.target.value='';if(fl)verifyFile(fl)});
   if(AS.phase==='run')UI.tab='ases';
-  setInterval(asesTick,1000);asesTick();
+  applyRole();
+  setInterval(()=>{asesTick();const l=$('#gp-left');if(l&&AS.phase==='run')l.textContent=fmtT(asesLeft())},1000);asesTick();
+}
+/* ================= MODE GURU: KENDALI PENUH DAN BATASAN MURID ================= */
+const GP_KEY='tjkt-guru-v1',GP_SALT='tjkt-guru-2026';
+const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:''};
+const GP=Object.assign({},GP_DEF);
+let GP_PEND=null,GP_FAIL=0,GP_LOCK=0;
+function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180)}
+function saveGP(){try{localStorage.setItem(GP_KEY,JSON.stringify(GP))}catch(e){}}
+const pinHash=p=>fnv(String(p)+'|'+GP_SALT);
+function applyRole(){
+  const g=ROLE==='guru',st=ROLE==='siswa';
+  const tg=$('[data-tab="guru"]');if(tg)tg.hidden=!g;
+  for(const id of['b-set','b-import','b-mon']){const e=$('#'+id);if(e)e.hidden=!g}
+  const c=$('#b-copy');if(c)c.hidden=st||!(g||GP.allowCopy);
+  const r=$('#b-role');if(r){r.hidden=!g;r.innerHTML='🔓 <span class="lb">Keluar</span>'}
+  document.body.classList.toggle('role-guru',g);document.body.classList.toggle('role-siswa',st);
+  if(st)UI.tab='ases';else if(!g&&UI.tab==='guru')UI.tab='ases';
+  markTabs();renderPanel();asesTick();
+  const nb=$('#net-badge');if(nb&&!st)nb.hidden=true;
+}
+function pinDialog(title,desc,onOk){
+  GP_PEND=onOk;
+  const first=!GP.pin&&title==='Masuk mode guru';
+  const body='<p class="small muted">'+desc+'</p>'+(first?'<div class="fld"><label for="gp-pin">Buat PIN guru (minimal 4 karakter)</label><input id="gp-pin" type="password" autocomplete="off" maxlength="30"></div><div class="fld"><label for="gp-pin2">Ulangi PIN</label><input id="gp-pin2" type="password" autocomplete="off" maxlength="30"></div>':'<div class="fld"><label for="gp-pin">PIN guru</label><input id="gp-pin" type="password" autocomplete="off" maxlength="30"></div>')+'<p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpok">'+(first?'Simpan PIN dan masuk':'Masuk')+'</button></div>';
+  showDlg(dlgShell(title,body),true);
+  setTimeout(()=>{const i=$('#gp-pin');if(i)i.focus()},50);
+}
+function gpSubmit(){
+  const err=$('#gp-err'),say=m=>{if(err)err.textContent=m};
+  const p=($('#gp-pin')||{}).value||'';
+  if(!GP.pin){
+    const p2=($('#gp-pin2')||{}).value||'';
+    if(p.length<4){say('PIN minimal 4 karakter.');return}
+    if(p!==p2){say('Kedua PIN tidak sama.');return}
+    GP.pin=pinHash(p);saveGP();
+  }else{
+    if(Date.now()<GP_LOCK){say('Terlalu banyak percobaan. Coba lagi '+Math.ceil((GP_LOCK-Date.now())/1000)+' detik lagi.');return}
+    if(pinHash(p)!==GP.pin){GP_FAIL++;if(GP_FAIL>=5){GP_FAIL=0;GP_LOCK=Date.now()+30000;say('Terlalu banyak percobaan. Tunggu 30 detik.')}else say('PIN salah.');return}
+    GP_FAIL=0;
+  }
+  const fn=GP_PEND;GP_PEND=null;closeDlg();if(fn)fn();
+}
+function needGuru(title,fn){
+  if(ROLE==='guru'){fn();return}
+  pinDialog(title,'Tindakan ini hanya boleh dilakukan guru. Minta guru memasukkan PIN.',fn);
+}
+PA.rolebtn=()=>{};
+function roleClick(){
+  if(ROLE==='guru'){UI.tab='guru';markTabs();renderPanel();return}
+  pinDialog('Masuk mode guru','Mode guru membuka pengaturan asesmen, pemeriksaan berkas, dan semua fitur tanpa batasan.',()=>{ROLE='guru';UI.tab='guru';applyRole();toast('Mode guru aktif.','good')});
+}
+function exitGuru(){if(typeof monClose==='function')monClose();showGate()}
+/* ---------- tindakan guru yang dibungkus PIN untuk murid ---------- */
+const _asabort=PA.asabort,_asredo=PA.asredo;
+PA.asabort=()=>{if(ROLE==='guru'||GP.allowAbort)_asabort();else needGuru('Batalkan asesmen',_asabort)};
+PA.asredo=()=>{if(ROLE==='guru'||GP.allowRedo)_asredo();else needGuru('Ulangi asesmen',_asredo)};
+PA.asaddtime=()=>{if(AS.phase!=='run')return;AS.id.durasi=(parseInt(AS.id.durasi)||90)+10;AS.over=false;saveAses();asesTick();renderPanel();toast('Waktu ditambah 10 menit.','good')};
+PA.asforce=()=>{if(AS.phase!=='run')return;AS.agree=true;AS.confirmEmpty=true;PA.asfinish();toast('Asesmen diakhiri oleh guru.','good')};
+PA.gpexit=exitGuru;
+PA.gpchpin=()=>{
+  showDlg(dlgShell('Ganti PIN guru','<div class="fld"><label for="gp-old">PIN lama</label><input id="gp-old" type="password" autocomplete="off"></div><div class="fld"><label for="gp-new">PIN baru (minimal 4 karakter)</label><input id="gp-new" type="password" autocomplete="off" maxlength="30"></div><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpchg">Simpan PIN baru</button></div>'),true);
+};
+PA.gpcopy=()=>{const o=Object.assign({},GP);delete o.pin;showDlg(dlgShell('Salin pengaturan','<p class="small muted">Salin teks ini lalu tempel di Mode guru, bagian Pengaturan, pada komputer lain agar semua murid memakai aturan yang sama. PIN tidak ikut disalin.</p><textarea id="iotxt" rows="9" readonly>'+esc(JSON.stringify(o,null,1))+'</textarea>'),true)};
+PA.gpapply=()=>{
+  showDlg(dlgShell('Terapkan pengaturan','<p class="small muted">Tempel teks pengaturan dari komputer guru.</p><textarea id="gp-json" rows="9"></textarea><p class="small" id="gp-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="gpimp">Terapkan</button></div>'),true);
+};
+/* ---------- panel guru ---------- */
+const gpChk=(k,l,d)=>'<label class="row" style="align-items:flex-start;margin-top:6px"><input type="checkbox" data-ch="gp" data-k="'+k+'" '+(GP[k]?'checked':'')+' style="flex:none;margin-top:3px"> <span class="small" style="flex:1;min-width:0"><b>'+l+'</b>'+(d?'<br><span class="muted">'+d+'</span>':'')+'</span></label>';
+const gpFld=(k,l,t,x)=>'<div class="fld"><label for="gpf-'+k+'">'+l+'</label><input id="gpf-'+k+'" type="'+(t||'text')+'" data-in="gp" data-ch="gp" data-k="'+k+'" value="'+esc(GP[k])+'" autocomplete="off" '+(x||'')+'></div>';
+function panelGuru(){
+  if(ROLE!=='guru')return '<div class="card"><p class="small muted">Panel ini hanya untuk guru.</p></div>';
+  let h=dbCard()+'<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>Mode guru</b><span class="pill good">Aktif</span></div><p class="small muted" style="margin:6px 0 0">Semua fitur terbuka dan tidak dibatasi. Pekerjaan Anda di kanvas tidak ikut dicatat sebagai bukti uji murid.</p></div>';
+  h+='<div class="card"><h3>Asesmen di komputer ini</h3>';
+  if(AS.phase==='run')h+='<p class="small"><b>'+esc(AS.id.nama)+'</b> · '+esc(AS.id.kelas)+' · absen '+esc(AS.id.absen)+'<br>Paket '+asesPaket()+' · sisa waktu <span class="mono" id="gp-left">'+fmtT(asesLeft())+'</span></p><div class="row"><button class="btn sm" data-act="asaddtime">+10 menit</button><button class="btn sm pri" data-act="asforce">Akhiri sekarang</button><button class="btn sm bad" data-act="asabort">Reset</button></div>';
+  else if(AS.phase==='done')h+='<p class="small">Selesai: <b>'+esc(AS.id.nama)+'</b> · '+esc(AS.id.kelas)+' · nilai otomatis '+fmt1(AS.result.skor.otomatis)+' / 70.</p><div class="row"><button class="btn sm bad" data-act="asredo">Reset untuk murid berikutnya</button></div>';
+  else h+='<p class="small muted">Belum ada asesmen berjalan. Murid mengisi identitas di tab Asesmen.</p>';
+  h+='</div>';
+  h+='<div class="card"><h3>Pengaturan asesmen</h3><div class="g2">'+gpFld('sekolah','Sekolah','text','maxlength="60"')+gpFld('mapel','Mata pelajaran','text','maxlength="60"')+'</div><div class="g2"><div class="fld"><label for="gpf-paket">Paket soal</label><select id="gpf-paket" data-ch="gp" data-k="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A: lab komputer'],['B','B: kabel dan nirkabel'],['C','C: dua gedung dan router'],['D','D: VLAN']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+gpFld('durasi','Durasi (menit)','number','min="30" max="180"')+'</div>'+gpFld('maxCek','Jumlah Cek mandiri','number','min="0" max="10"');
+  h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
+  h+='<p class="small muted" style="margin:10px 0 0">Selalu berlaku bagi murid: aktivitas latihan, template, diagnosa otomatis, pemuatan proyek, dan pengaturan dikunci saat asesmen berjalan. Paket, durasi, dan batasan hanya berlaku untuk asesmen yang dimulai setelah diubah.</p></div>';
+  h+='<div class="card"><h3>Periksa hasil murid</h3><p class="small muted">Muat berkas JSON dari Google Classroom untuk menghitung ulang skor dan melihat jaringannya.</p><button class="btn sm pri" data-act="asverify">Periksa berkas siswa</button></div>';
+  h+='<div class="card"><h3>Komputer lain dan PIN</h3><p class="small muted">Pengaturan tersimpan per browser dan per komputer. Salin ke komputer lain agar sama.</p><div class="row"><button class="btn sm" data-act="gpcopy">Salin pengaturan</button><button class="btn sm" data-act="gpapply">Terapkan pengaturan</button><button class="btn sm" data-act="gpchpin">Ganti PIN</button></div></div>';
+  h+='<div class="row"><button class="btn bad" data-act="gpexit">Keluar mode guru</button></div>';
+  return h;
+}
+PCH.gp=el=>{
+  const k=el.dataset.k;if(!(k in GP_DEF)||k==='pin')return;
+  if(el.type==='checkbox')GP[k]=el.checked;
+  else if(typeof GP_DEF[k]==='number'){
+    const v=parseInt(el.value);if(!(v>=0))return;
+    GP[k]=k==='durasi'?clamp(v,30,180):(k==='maxCek'?clamp(v,0,10):v);
+  }else GP[k]=String(el.value).slice(0,60);
+  saveGP();
+  if(k==='allowCopy')applyRole();
+};
+function gpDialog(){
+  const d=$('#dlg');if(!d)return;
+  d.addEventListener('click',e=>{
+    const t=e.target.closest('[data-g]');if(!t)return;
+    const g=t.dataset.g;
+    if(g==='gpok')gpSubmit();
+    else if(g==='gpchg'){
+      const o=$('#gp-old').value,n=$('#gp-new').value,err=$('#gp-err');
+      if(pinHash(o)!==GP.pin){err.textContent='PIN lama salah.';return}
+      if(n.length<4){err.textContent='PIN baru minimal 4 karakter.';return}
+      GP.pin=pinHash(n);saveGP();closeDlg();toast('PIN diganti.','good');
+    }else if(g==='gpimp'){
+      const err=$('#gp-err');let o;
+      try{o=JSON.parse($('#gp-json').value)}catch(x){err.textContent='Teks bukan JSON yang valid.';return}
+      if(!o||typeof o!=='object'){err.textContent='Isi pengaturan tidak sesuai.';return}
+      for(const k of Object.keys(GP_DEF))if(k!=='pin'&&o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k];
+      GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);
+      saveGP();closeDlg();applyRole();toast('Pengaturan diterapkan.','good');
+    }
+  });
+  d.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id&&/^gp-pin2?$/.test(e.target.id)){e.preventDefault();gpSubmit()}});
+}
+/* ================= MESIN BASIS DATA SESI (mode lokal; cermin dari supabase_setup.sql) ================= */
+function cbtNewStore(){return{guru_key:'lokal',sesi:[],peserta:[]}}
+function cbtEngine(S,fn,a,now,rid){
+  a=a||{};
+  const E=c=>{throw new Error(c)};
+  const int=(v,d)=>/^-?[0-9]{1,6}$/.test(String(v))?parseInt(v,10):d;
+  const guru=()=>{if(a.p_key==null||a.p_key!==S.guru_key)E('kunci_salah')};
+  const sesiRow=s=>({id:s.id,token:s.token,judul:s.judul,status:s.status,policy:s.policy,dibuat:s.dibuat});
+  const id=()=>rid();
+  const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+  const kelasOK=(pol,kl)=>{const l=String(pol.kelas||'');if(!l)return true;return l.split(',').some(x=>x.trim().toUpperCase()===kl)};
+  switch(fn){
+  case 'db_ping':return{ok:true,server_ms:now};
+  case 'guru_cek':guru();return{ok:true,server_ms:now};
+  case 'guru_sesi_buat':{
+    guru();const t=String(a.p_token==null?'':a.p_token).trim().toUpperCase();
+    if(!/^[A-Z0-9]{4,10}$/.test(t))E('token_tidak_valid');
+    if(S.sesi.some(s=>s.token===t))E('token_dipakai');
+    const s={id:id(),token:t,judul:String(a.p_judul==null?'':a.p_judul).slice(0,80),status:'buka',policy:isObj(a.p_policy)?a.p_policy:{},dibuat:now};
+    S.sesi.push(s);return Object.assign(sesiRow(s),{jumlah:0});}
+  case 'guru_sesi_daftar':guru();
+    return S.sesi.slice().sort((x,y)=>y.dibuat-x.dibuat).map(s=>Object.assign(sesiRow(s),{jumlah:S.peserta.filter(p=>p.sesi_id===s.id).length}));
+  case 'guru_sesi_ubah':{guru();if(!['buka','tutup'].includes(a.p_status))E('status_tidak_valid');
+    const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');s.status=a.p_status;return{ok:true}}
+  case 'guru_sesi_hapus':{guru();const i=S.sesi.findIndex(x=>x.id===a.p_sesi);if(i<0)E('sesi_tidak_ada');
+    S.sesi.splice(i,1);S.peserta=S.peserta.filter(p=>p.sesi_id!==a.p_sesi);return{ok:true}}
+  case 'guru_pantau':{guru();const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');
+    const ps=S.peserta.filter(p=>p.sesi_id===s.id).sort((x,y)=>x.kelas<y.kelas?-1:x.kelas>y.kelas?1:x.absen-y.absen).map(p=>{
+      const st=Object.assign({},p.state);delete st.log;delete st.tests;
+      return{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,viol:int(p.state.viol,0),ada_hasil:p.hasil!=null,state:st}});
+    return{server_ms:now,sesi:sesiRow(s),peserta:ps}}
+  case 'guru_aksi':{guru();if(!S.sesi.some(x=>x.id===a.p_sesi))E('sesi_tidak_ada');
+    const t=a.p_tipe,d=a.p_data||{};
+    const sel=S.peserta.filter(p=>p.sesi_id===a.p_sesi&&(a.p_pid==null||p.id===a.p_pid));
+    let n=0;
+    if(t==='kunci'){sel.filter(p=>p.hasil==null).forEach(p=>{p.terkunci=true;n++})}
+    else if(t==='buka'){sel.forEach(p=>{p.terkunci=false;p.viol_dasar=int(p.state.viol,0);n++})}
+    else if(t==='tambah'){const m=Math.min(120,Math.max(1,int(d.menit,10)));sel.filter(p=>p.hasil==null).forEach(p=>{p.tambah_menit+=m;n++})}
+    else if(t==='pesan'){if(String(d.teks==null?'':d.teks).trim().length===0)E('pesan_kosong');
+      sel.filter(p=>p.hasil==null).forEach(p=>{p.pesan.push({id:p.pesan.length+1,t:now,teks:String(d.teks).slice(0,300)});n++})}
+    else if(t==='akhiri'){sel.filter(p=>p.hasil==null).forEach(p=>{p.paksa_akhir=true;n++})}
+    else if(t==='reset'){if(a.p_pid==null)E('pid_wajib');const k=S.peserta.length;S.peserta=S.peserta.filter(p=>!(p.sesi_id===a.p_sesi&&p.id===a.p_pid));n=k-S.peserta.length}
+    else E('aksi_tidak_dikenal');
+    return{n}}
+  case 'guru_detail':{guru();const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
+    return{server_ms:now,peserta:{id:p.id,nama:p.nama,kelas:p.kelas,absen:p.absen,nis:p.nis,status:p.status,terkunci:p.terkunci,tambah_menit:p.tambah_menit,masuk:p.masuk,terakhir:p.terakhir,state:p.state},snap:p.snap==null?null:p.snap,hasil:p.hasil==null?null:p.hasil}}
+  case 'siswa_gabung':{
+    const nm=String(a.p_nama==null?'':a.p_nama).trim(),kl=String(a.p_kelas==null?'':a.p_kelas).trim().toUpperCase(),ns=String(a.p_nis==null?'':a.p_nis).trim();
+    if(nm.length<3||nm.length>60)E('nama_tidak_valid');
+    if(kl.length<1||kl.length>20)E('kelas_tidak_valid');
+    const ab=a.p_absen;if(!Number.isInteger(ab)||ab<1||ab>99)E('absen_tidak_valid');
+    const s=S.sesi.find(x=>x.token===String(a.p_token==null?'':a.p_token).trim().toUpperCase());if(!s)E('token_salah');
+    if(!kelasOK(s.policy,kl))E('kelas_tidak_diizinkan');
+    if(s.policy.reqNIS===true&&ns.length<4)E('nis_wajib');
+    const p=S.peserta.find(x=>x.sesi_id===s.id&&x.kelas===kl&&x.absen===ab);
+    if(p){
+      if(a.p_rid!=null&&a.p_rid===p.secret){p.terakhir=now;return{pid:p.id,secret:p.secret,policy:s.policy,judul:s.judul,sesi_id:s.id,masuk:p.masuk,server_ms:now,lanjut:true}}
+      E('sudah_masuk');
+    }
+    if(s.status==='tutup')E('sesi_tutup');
+    const sec=(typeof a.p_rid==='string'&&/^[0-9a-f]{32,128}$/.test(a.p_rid))?a.p_rid:id()+id();
+    const np={id:id(),sesi_id:s.id,nama:nm,kelas:kl,absen:ab,nis:ns,secret:sec,masuk:now,terakhir:now,status:'masuk',terkunci:false,tambah_menit:0,paksa_akhir:false,pesan:[],viol_dasar:0,state:{},snap:null,hasil:null};
+    S.peserta.push(np);
+    return{pid:np.id,secret:sec,policy:s.policy,judul:s.judul,sesi_id:s.id,masuk:now,server_ms:now,lanjut:false}}
+  case 'siswa_ping':{
+    const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
+    if(p.secret!==a.p_secret)E('rahasia_salah');
+    const s=S.sesi.find(x=>x.id===p.sesi_id);
+    const st=isObj(a.p_state)&&JSON.stringify(a.p_state).length<20000?a.p_state:p.state;
+    const v=int(st.viol,0),mx=int(s.policy.maxViol,0);
+    const lock=p.terkunci||(mx>0&&v-p.viol_dasar>=mx&&p.hasil==null);
+    p.state=st;p.terakhir=now;p.terkunci=lock;
+    p.status=p.hasil!=null?'selesai':(st.phase==='run'?'mengerjakan':'masuk');
+    if(a.p_snap!=null&&String(a.p_snap).length<400000)p.snap=String(a.p_snap);
+    return{server_ms:now,terkunci:lock,tambah_menit:p.tambah_menit,paksa_akhir:p.paksa_akhir,pesan:p.pesan,sesi_status:s.status,terkirim:p.hasil!=null,masuk:p.masuk}}
+  case 'siswa_kirim':{
+    const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
+    if(p.secret!==a.p_secret)E('rahasia_salah');
+    if(!isObj(a.p_hasil)||a.p_hasil.format!=='tjkt-asesmen-v1')E('hasil_tidak_valid');
+    if(JSON.stringify(a.p_hasil).length>800000)E('terlalu_besar');
+    p.hasil=a.p_hasil;p.status='selesai';p.terakhir=now;return{ok:true,server_ms:now}}
+  }
+  E('fungsi_tidak_ada');
+}
+if(typeof module!=='undefined')module.exports={cbtEngine,cbtNewStore};
+/* ================= CBT: BASIS DATA, LOGIN, PEMANTAUAN ================= */
+const DB_DEFAULT={url:'',key:''}; /* guru boleh mengisi url dan key Supabase di sini sebelum diunggah ke GitHub */
+const DBC={url:'',key:'',gkey:''};
+const URLOK=u=>/^https:\/\/[^\s]+$/.test(u)||/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/[^\s]*)?$/.test(u);
+const DBK='tjkt-db-cfg',SWK='tjkt-siswa-v1',GKK='tjkt-db-gkey',LDB='tjkt-cbt-db';
+const CB={online:true,viol:0,base:0,events:[],busy:false,lastSnap:'',fails:0,locked:false,needFS:false,lastViol:0,sending:false,sendErr:'',auto:false,gateTab:'siswa',confirmFn:null};
+let SW=null,BEAT=0,HD=false;
+const ERRM={jaringan:'Tidak bisa terhubung ke basis data. Periksa koneksi internet.',respons_tidak_valid:'Respons basis data tidak valid. Periksa alamat dan kunci basis data.',penyimpanan:'Penyimpanan browser tidak bisa dipakai (jendela pribadi?).',
+  token_salah:'Token tidak ditemukan. Periksa token dari guru.',sesi_tutup:'Sesi sudah ditutup guru.',sudah_masuk:'Akun ini sudah masuk di perangkat lain. Minta guru mereset login.',
+  kelas_tidak_diizinkan:'Kelas Anda tidak terdaftar pada sesi ini.',nis_wajib:'NIS wajib diisi (minimal 4 karakter).',nama_tidak_valid:'Nama minimal 3 huruf.',kelas_tidak_valid:'Isi kelas.',absen_tidak_valid:'Nomor absen 1 sampai 99.',
+  kunci_salah:'Kunci guru basis data salah.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
+  sesi_tidak_ada:'Sesi tidak ditemukan.',pesan_kosong:'Pesan tidak boleh kosong.',hasil_tidak_valid:'Hasil tidak valid.',terlalu_besar:'Berkas hasil terlalu besar.'};
+const errMsg=c=>ERRM[c]||(/^server_/.test(c)?'Server basis data bermasalah ('+c.slice(7)+').':'Terjadi galat ('+c+').');
+const dbRemote=()=>!!(DBC.url&&DBC.key);
+const gk=()=>dbRemote()?DBC.gkey:'lokal';
+function loadDBC(){
+  DBC.url=DB_DEFAULT.url;DBC.key=DB_DEFAULT.key;
+  try{const o=JSON.parse(localStorage.getItem(DBK)||'null');if(o&&typeof o.url==='string'&&typeof o.key==='string'){DBC.url=o.url;DBC.key=o.key}}catch(e){}
+  try{DBC.gkey=localStorage.getItem(GKK)||''}catch(e){}
+  try{
+    const m=/[#&]cfg=([^&]+)/.exec(location.hash||'');
+    if(m){const o=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+      if(o&&URLOK(o.u||'')&&o.k){DBC.url=o.u;DBC.key=o.k;try{localStorage.setItem(DBK,JSON.stringify({url:o.u,key:o.k}))}catch(e){};history.replaceState(null,'',location.pathname+location.search)}}
+  }catch(e){}
+}
+function saveDBC(){try{localStorage.setItem(DBK,JSON.stringify({url:DBC.url,key:DBC.key}));localStorage.setItem(GKK,DBC.gkey||'')}catch(e){}}
+async function rpc(fn,args){
+  if(!dbRemote())return localRpc(fn,args);
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
+  let r,txt;
+  try{
+    r=await fetch(DBC.url.replace(/\/+$/,'')+'/rest/v1/rpc/'+fn,{method:'POST',headers:Object.assign({'Content-Type':'application/json',apikey:DBC.key},/^eyJ/.test(DBC.key)?{Authorization:'Bearer '+DBC.key}:{}),body:JSON.stringify(args||{}),signal:ctl.signal});
+    txt=await r.text();
+  }catch(e){throw new Error('jaringan')}finally{clearTimeout(to)}
+  let j;try{j=JSON.parse(txt)}catch(e){j=undefined}
+  if(!r.ok){const m=j&&j.message?String(j.message):'';throw new Error(/^[a-z_]{3,30}$/.test(m)?m:'server_'+r.status)}
+  if(j===undefined)throw new Error('respons_tidak_valid');
+  return j;
+}
+function localRpc(fn,args){
+  return new Promise((res,rej)=>{
+    try{
+      let S=null;try{S=JSON.parse(localStorage.getItem(LDB)||'null')}catch(e){}
+      if(!S)S=cbtNewStore();
+      const rid=()=>{const a=new Uint8Array(16);(window.crypto||{getRandomValues:x=>x.forEach((_,i)=>x[i]=Math.random()*256)}).getRandomValues(a);return Array.from(a,b=>b.toString(16).padStart(2,'0')).join('')};
+      const v=cbtEngine(S,fn,args||{},Date.now(),rid);
+      try{localStorage.setItem(LDB,JSON.stringify(S))}catch(e){throw new Error('penyimpanan')}
+      res(JSON.parse(JSON.stringify(v===undefined?null:v)));
+    }catch(e){rej(e)}
+  });
+}
+/* ---------- penyimpanan sesi siswa ---------- */
+function saveSW(){try{if(SW)localStorage.setItem(SWK,JSON.stringify({pid:SW.pid,secret:SW.secret,sesi:SW.sesi,judul:SW.judul,token:SW.token,ids:SW.ids,policy:SW.policy,lastMsg:SW.lastMsg,terkirim:SW.terkirim,viol:CB.viol,base:CB.base}))}catch(e){}}
+function readSW(){try{const o=JSON.parse(localStorage.getItem(SWK)||'null');return o&&o.pid&&o.secret&&o.ids?o:null}catch(e){return null}}
+function clearSW(){try{localStorage.removeItem(SWK)}catch(e){}}
+const POLKEYS=()=>Object.keys(GP_DEF).filter(k=>k!=='pin');
+function applyPolicy(p){if(!p||typeof p!=='object')return;for(const k of POLKEYS())if(p[k]!=null&&typeof p[k]===typeof GP_DEF[k])GP[k]=p[k]}
+/* ---------- gerbang login ---------- */
+function showGate(note){
+  ROLE='tamu';SW=null;stopBeat();hardenOff();CB.locked=false;CB.needFS=false;cbOverlay();
+  if(document.fullscreenElement)try{document.exitFullscreen()}catch(e){}
+  $('#gate').hidden=false;document.body.classList.add('gate-on');
+  renderGate(CB.gateTab,note||'');applyRole();
+}
+function hideGate(){$('#gate').hidden=true;document.body.classList.remove('gate-on');requestAnimationFrame(()=>{try{fitView()}catch(e){}})}
+function renderGate(tab,msg){
+  CB.gateTab=tab;
+  const first=!GP.pin;
+  let f;
+  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Masuk asesmen</button>';
+  else f=(first?'<p class="small muted">Belum ada PIN guru di komputer ini. Buat PIN baru.</p><div class="fld"><label for="gt-pin">Buat PIN guru (minimal 4 karakter)</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30"></div><div class="fld"><label for="gt-pin2">Ulangi PIN</label><input id="gt-pin2" type="password" autocomplete="off" maxlength="30"></div>':'<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30"></div>')+'<button class="btn pri" data-gate="guru" id="gt-go">'+(first?'Simpan PIN dan masuk':'Masuk sebagai guru')+'</button>';
+  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">Simulator Jaringan TJKT</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div><div class="small muted gdb" id="gt-db">Memeriksa basis data...</div></div>';
+  const first1=$('#gt-nama')||$('#gt-pin');if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
+  gateDbStatus();
+}
+async function gateDbStatus(){
+  const el=$('#gt-db');if(!el)return;
+  const t0=Date.now();
+  try{await rpc('db_ping',{});if($('#gt-db'))$('#gt-db').innerHTML=dbRemote()?'<span style="color:var(--good)">●</span> Terhubung ke basis data ('+(Date.now()-t0)+' ms)':'<span style="color:var(--warn)">●</span> Mode uji coba: data hanya di browser ini, tidak lintas komputer.'}
+  catch(e){if($('#gt-db'))$('#gt-db').innerHTML='<span style="color:var(--bad)">●</span> '+esc(errMsg(e.message))}
+}
+const gerr=m=>{const e=$('#gt-err');if(e)e.textContent=m};
+async function gateSiswa(){
+  const v=id=>(($('#'+id)||{}).value||'').trim();
+  const nama=v('gt-nama'),kelas=v('gt-kelas').toUpperCase(),absen=parseInt(v('gt-absen')),nis=v('gt-nis'),token=v('gt-token').toUpperCase();
+  if(nama.length<3)return gerr(ERRM.nama_tidak_valid);
+  if(!kelas)return gerr(ERRM.kelas_tidak_valid);
+  if(!(absen>=1&&absen<=99))return gerr(ERRM.absen_tidak_valid);
+  if(!/^[A-Z0-9]{4,10}$/.test(token))return gerr('Isi token dari guru (4 sampai 10 huruf atau angka).');
+  const btn=$('#gt-go');if(btn)btn.disabled=true;gerr('Menghubungkan...');
+  const old=readSW();
+  const key=token+'|'+kelas+'|'+absen;
+  let rid=old&&old.token===token&&old.ids.kelas===kelas&&String(old.ids.absen)===String(absen)?old.secret:null;
+  if(!rid){
+    let pend=null;try{pend=JSON.parse(localStorage.getItem('tjkt-pending')||'null')}catch(e){}
+    if(!pend||pend.k!==key){const a=new Uint8Array(16);(window.crypto||{getRandomValues:x=>x.forEach((_,i)=>x[i]=Math.random()*256)}).getRandomValues(a);pend={k:key,rid:Array.from(a,b=>b.toString(16).padStart(2,'0')).join('')};try{localStorage.setItem('tjkt-pending',JSON.stringify(pend))}catch(e){}}
+    rid=pend.rid;
+  }
+  try{
+    if(GP.wajibFS!==false&&document.documentElement.requestFullscreen)try{document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
+    const r=await rpc('siswa_gabung',{p_token:token,p_nama:nama,p_kelas:kelas,p_absen:absen,p_nis:nis,p_rid:rid});
+    try{localStorage.removeItem('tjkt-pending')}catch(e){}
+    siswaMasuk(r,{nama,kelas,absen,nis},token,old&&old.secret===rid?old:null);
+  }catch(e){gerr(errMsg(e.message));if(btn)btn.disabled=false;if(document.fullscreenElement)try{document.exitFullscreen()}catch(x){}}
+}
+function siswaMasuk(r,ids,token,old){
+  SW={pid:r.pid,secret:r.secret,sesi:r.sesi_id,judul:r.judul,token,ids,policy:r.policy||{},lastMsg:old?old.lastMsg||0:0,terkirim:old?!!old.terkirim:false};
+  applyPolicy(r.policy);
+  ROLE='siswa';
+  const same=r.lanjut&&AS.phase!=='idle'&&AS.id.nama===ids.nama&&AS.id.kelas===ids.kelas&&String(AS.id.absen)===String(ids.absen);
+  CB.viol=old?+old.viol||0:0;CB.base=old?+old.base||0:0;
+  if(!same){
+    CB.events=[];CB.auto=false;CB.lastSnap='';
+    Object.assign(AS.id,{nama:ids.nama,kelas:ids.kelas,absen:ids.absen,nis:ids.nis});
+    PA.asstart();
+    if(AS.err){toast(AS.err,'bad')}
+    AS.start=Date.now()-Math.max(0,(r.server_ms||Date.now())-(r.masuk||Date.now()));saveAses();
+  }
+  saveSW();hideGate();applyRole();startBeat();hardenOn();beat();cbOverlay();
+}
+function gateGuru(){
+  const p=(($('#gt-pin')||{}).value)||'';
+  if(!GP.pin){
+    const p2=(($('#gt-pin2')||{}).value)||'';
+    if(p.length<4)return gerr('PIN minimal 4 karakter.');
+    if(p!==p2)return gerr('Kedua PIN tidak sama.');
+    GP.pin=pinHash(p);saveGP();
+  }else{
+    if(Date.now()<GP_LOCK)return gerr('Terlalu banyak percobaan. Coba lagi '+Math.ceil((GP_LOCK-Date.now())/1000)+' detik lagi.');
+    if(pinHash(p)!==GP.pin){GP_FAIL++;if(GP_FAIL>=5){GP_FAIL=0;GP_LOCK=Date.now()+30000;return gerr('Terlalu banyak percobaan. Tunggu 30 detik.')}return gerr('PIN salah.')}
+    GP_FAIL=0;
+  }
+  ROLE='guru';stopBeat();hardenOff();hideGate();UI.tab='guru';applyRole();toast('Mode guru aktif.','good');
+}
+/* ---------- detak siswa ---------- */
+function cbState(){
+  let skor=0;try{skor=AS.phase==='done'&&AS.result?AS.result.skor.otomatis:evalAses(asesCtx()).total}catch(e){}
+  return{phase:AS.phase,sisa:Math.round(asesLeft()/1000),skor:Math.round(skor*10)/10,cek:AS.checks,dev:S.devices.length,kab:S.links.length,uji:AS.tests.length,viol:CB.viol,fs:!!document.fullscreenElement,
+    paket:asesPaket(),log:CB.events.slice(0,15),tests:AS.tests.slice(0,8),ua:navigator.userAgent.slice(0,60)};
+}
+function startBeat(){stopBeat();BEAT=setInterval(beat,8000)}
+function stopBeat(){if(BEAT){clearInterval(BEAT);BEAT=0}}
+function setOnline(b){CB.online=b;const e=$('#net-badge');if(e)e.hidden=b||ROLE!=='siswa'}
+async function beat(){
+  if(!SW||CB.busy)return;CB.busy=true;
+  try{
+    const sn=serialize(),snap=sn!==CB.lastSnap?sn:null;
+    const r=await rpc('siswa_ping',{p_pid:SW.pid,p_secret:SW.secret,p_state:cbState(),p_snap:snap});
+    if(snap!==null)CB.lastSnap=sn;
+    CB.fails=0;setOnline(true);applyServer(r);
+    if(AS.phase==='done'&&AS.result&&!r.terkirim)sendHasil();
+    else if(r.terkirim&&SW&&!SW.terkirim){SW.terkirim=true;saveSW();renderPanel()}
+  }catch(e){
+    const c=e&&e.message;
+    if(c==='peserta_tidak_ada'||c==='rahasia_salah'){clearSW();asReset();showGate('Sesi Anda direset guru atau tidak dikenali. Silakan masuk kembali.')}
+    else{CB.fails++;setOnline(false)}
+  }finally{CB.busy=false}
+}
+function applyServer(r){
+  if(!r||ROLE!=='siswa')return;
+  if(r.tambah_menit!=null){const d=GP.durasi+(+r.tambah_menit||0);if(AS.id.durasi!==d){AS.id.durasi=d;AS.over=false;saveAses();asesTick()}}
+  if(r.terkunci)setLocked(true);else if(CB.locked)setLocked(false);
+  if(Array.isArray(r.pesan)){const fresh=r.pesan.filter(m=>m.id>SW.lastMsg);if(fresh.length){SW.lastMsg=Math.max(...fresh.map(m=>m.id));saveSW();cbMsg(fresh.map(m=>m.teks).join('\n'))}}
+  if(r.paksa_akhir&&AS.phase==='run')PA.asforce();
+}
+function setLocked(b){
+  if(CB.locked===b)return;
+  CB.locked=b;if(!b){CB.base=CB.viol;saveSW()}
+  cbOverlay();
+}
+function cbOverlay(){
+  const o=$('#lockov');if(!o)return;
+  const run=ROLE==='siswa'&&AS.phase==='run';
+  CB.needFS=!!(run&&GP.wajibFS&&document.fullscreenEnabled&&!document.fullscreenElement);
+  if(ROLE==='siswa'&&CB.locked&&AS.phase!=='done'){o.hidden=false;o.innerHTML='<div class="lkc"><div style="font-size:40px">🔒</div><h2>Layar dikunci</h2><p>Guru mengunci layar Anda atau terjadi terlalu banyak pelanggaran ('+CB.viol+'). Angkat tangan dan panggil pengawas. Waktu tetap berjalan.</p></div>'}
+  else if(CB.needFS){o.hidden=false;o.innerHTML='<div class="lkc"><div style="font-size:40px">⛶</div><h2>Layar penuh diperlukan</h2><p>Asesmen harus dikerjakan dalam layar penuh.</p><button class="btn pri" data-lk="fs">Masuk layar penuh</button></div>'}
+  else{o.hidden=true;o.innerHTML=''}
+}
+function cbMsg(t){const b=$('#cbmsg');if(!b)return;b.hidden=false;b.innerHTML='<b>Pesan dari guru</b><div style="white-space:pre-wrap;margin:4px 0 8px">'+esc(t)+'</div><button class="btn sm pri" data-lk="msgok">Mengerti</button>'}
+async function sendHasil(){
+  if(CB.sending||!SW||!AS.result)return;CB.sending=true;CB.sendErr='';renderPanel();
+  try{await rpc('siswa_kirim',{p_pid:SW.pid,p_secret:SW.secret,p_hasil:JSON.parse(buildJSON())});SW.terkirim=true;saveSW()}
+  catch(e){CB.sendErr=errMsg(e.message)}
+  finally{CB.sending=false;renderPanel()}
+}
+function cbSendCard(){
+  if(ROLE!=='siswa')return '';
+  if(SW&&SW.terkirim)return '<div class="card" style="border-color:var(--good)"><b>✓ Hasil sudah terkirim ke guru.</b><div class="small muted">Tetap simpan PDF dan JSON untuk Google Classroom bila diminta.</div></div>';
+  return '<div class="card" style="border-color:var(--warn)"><b>'+(CB.sending?'Mengirim hasil ke guru...':'Hasil belum terkirim ke guru')+'</b>'+(CB.sendErr?'<div class="small" style="color:var(--bad)">'+esc(CB.sendErr)+'</div>':'')+'<div class="small muted">Jangan tutup halaman. Pengiriman diulang otomatis.</div><button class="btn sm pri" data-act="cbresend" '+(CB.sending?'disabled':'')+'>Kirim ulang</button></div>';
+}
+PA.cbresend=()=>sendHasil();
+const _asfin=PA.asfinish;
+PA.asfinish=()=>{_asfin();if(ROLE==='siswa'&&AS.phase==='done'){hardenOff();CB.locked=false;cbOverlay();sendHasil();beat()}};
+function cbTick(){
+  if(ROLE==='siswa'&&AS.phase==='run'&&asesLeft()<=0&&!CB.auto){CB.auto=true;toast('Waktu habis. Hasil dikirim otomatis.','warn');PA.asforce()}
+  if(ROLE==='siswa'&&AS.phase==='run'&&!CB.locked)cbOverlay();
+}
+/* ---------- pengamanan ala exambro ---------- */
+const hhmm=()=>new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const hdOn=()=>ROLE==='siswa'&&AS.phase==='run';
+function cbLog(ket,hitung){
+  CB.events.unshift({t:hhmm(),ket,n:hitung?CB.viol:0});if(CB.events.length>20)CB.events.pop();
+}
+function addViol(ket){
+  if(!hdOn())return;
+  const n=Date.now();if(n-CB.lastViol<2500)return;CB.lastViol=n;
+  CB.viol++;cbLog(ket,true);saveSW();toast('Pelanggaran dicatat: '+ket,'warn');
+  if(GP.maxViol>0&&CB.viol-CB.base>=GP.maxViol)setLocked(true);
+  beat();
+}
+const hVis=()=>{if(document.visibilityState==='hidden')addViol('Berpindah tab atau jendela')};
+let hbT=0;const hBlur=()=>{clearTimeout(hbT);hbT=setTimeout(()=>{if(hdOn()&&!document.hasFocus())addViol('Jendela kehilangan fokus')},900)};
+const hFS=()=>{if(hdOn()&&GP.wajibFS&&document.fullscreenEnabled&&!document.fullscreenElement)addViol('Keluar dari layar penuh');cbOverlay()};
+const hBlock=e=>{if(hdOn()&&GP.blokirSalin){e.preventDefault();cbLog('Mencoba '+({contextmenu:'klik kanan',copy:'menyalin',cut:'memotong',paste:'menempel',dragstart:'menyeret'}[e.type]||e.type),false)}};
+const hKey=e=>{if(!hdOn())return;const k=e.key;if(k==='F12'||(e.ctrlKey&&e.shiftKey&&/^[ijc]$/i.test(k))||(e.ctrlKey&&/^[usp]$/i.test(k))){e.preventDefault();cbLog('Menekan pintasan '+(e.ctrlKey?'Ctrl+':'')+k,false)}};
+const hUnload=e=>{if(hdOn()){e.preventDefault();e.returnValue=''}};
+function hardenOn(){
+  if(HD)return;HD=true;
+  document.addEventListener('visibilitychange',hVis);window.addEventListener('blur',hBlur);document.addEventListener('fullscreenchange',hFS);
+  for(const t of['contextmenu','copy','cut','paste','dragstart'])document.addEventListener(t,hBlock,true);
+  document.addEventListener('keydown',hKey,true);window.addEventListener('beforeunload',hUnload);
+}
+function hardenOff(){
+  if(!HD)return;HD=false;
+  document.removeEventListener('visibilitychange',hVis);window.removeEventListener('blur',hBlur);document.removeEventListener('fullscreenchange',hFS);
+  for(const t of['contextmenu','copy','cut','paste','dragstart'])document.removeEventListener(t,hBlock,true);
+  document.removeEventListener('keydown',hKey,true);window.removeEventListener('beforeunload',hUnload);
+}
+/* ---------- Ruang Pantau (guru) ---------- */
+const MON={sesi:[],cur:null,data:null,timer:0,err:'',msgTo:null,busy:false};
+const fmtS=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+async function monOpen(){
+  if(ROLE!=='guru')return;
+  if(dbRemote()&&!DBC.gkey){toast('Isi kunci guru basis data di tab Guru terlebih dulu.','warn');UI.tab='guru';markTabs();renderPanel();return}
+  $('#mon').hidden=false;MON.err='';monRender();
+  try{await monLoadSesi()}catch(e){MON.err=errMsg(e.message)}
+  await monPoll();clearInterval(MON.timer);MON.timer=setInterval(monPoll,4000);
+}
+function monClose(){clearInterval(MON.timer);MON.timer=0;$('#mon').hidden=true}
+async function monLoadSesi(){
+  MON.sesi=await rpc('guru_sesi_daftar',{p_key:gk()});
+  if(!MON.sesi.some(s=>s.id===MON.cur))MON.cur=MON.sesi[0]?MON.sesi[0].id:null;
+}
+async function monPoll(){
+  if(MON.busy||$('#mon').hidden)return;MON.busy=true;
+  try{
+    if(MON.cur){MON.data=await rpc('guru_pantau',{p_key:gk(),p_sesi:MON.cur})}else MON.data=null;
+    MON.err='';
+  }catch(e){MON.err=errMsg(e.message);if(e.message==='sesi_tidak_ada'){try{await monLoadSesi()}catch(x){}}}
+  finally{MON.busy=false}
+  monRender();
+}
+function monStatus(p,now){
+  const age=(now-p.terakhir)/1000,off=age>25&&p.status!=='selesai';
+  if(p.status==='selesai')return['Selesai','good'];
+  if(p.terkunci)return['Terkunci','bad'];
+  if(off)return['Offline','mute'];
+  return p.status==='mengerjakan'?['Mengerjakan','acc']:['Menunggu','mute'];
+}
+function monRender(){
+  const m=$('#mon');if(!m||m.hidden)return;
+  const d=MON.data,now=d?d.server_ms:Date.now(),ps=d?d.peserta:[];
+  const cur=MON.sesi.find(s=>s.id===MON.cur);
+  const cnt={on:0,work:0,done:0,lock:0};
+  for(const p of ps){const st=monStatus(p,now)[0];if(st==='Mengerjakan')cnt.work++;if(st==='Selesai')cnt.done++;if(st==='Terkunci')cnt.lock++;if(st!=='Offline'&&st!=='Selesai')cnt.on++}
+  let h='<div class="mh"><b style="font:700 18px var(--ff-head)">Ruang Pantau</b><span class="pill '+(MON.err?'bad':'good')+'">'+(MON.err?'Terputus':(dbRemote()?'Basis data aktif':'Mode uji coba'))+'</span><span style="flex:1"></span><button class="btn sm" data-mo="csv" '+(ps.length?'':'disabled')+'>Unduh rekap CSV</button><button class="btn sm" data-mo="close">✕ Tutup</button></div>';
+  if(MON.err)h+='<div class="mer" role="alert">'+esc(MON.err)+' Data di bawah mungkin tidak terbaru.</div>';
+  h+='<div class="mb">';
+  h+='<div class="card"><div class="row"><div class="fld" style="flex:1;min-width:180px"><label for="mon-sel">Sesi asesmen</label><select id="mon-sel" data-mo="sel">'+(MON.sesi.length?MON.sesi.map(s=>'<option value="'+s.id+'" '+(s.id===MON.cur?'selected':'')+'>'+esc(s.judul||'(tanpa judul)')+' · '+s.token+' · '+s.jumlah+' peserta</option>').join(''):'<option>Belum ada sesi</option>')+'</select></div><button class="btn sm pri" data-mo="new">+ Sesi baru</button></div>';
+  if(cur)h+='<div class="row" style="margin-top:8px;align-items:center"><span class="muted small">Token siswa</span><b class="tok" id="mon-tok">'+esc(cur.token)+'</b><button class="btn sm" data-mo="copytok">Salin</button><span class="pill '+(cur.status==='buka'?'good':'bad')+'">'+(cur.status==='buka'?'Sesi dibuka':'Sesi ditutup')+'</span><button class="btn sm" data-mo="toggle">'+(cur.status==='buka'?'Tutup sesi':'Buka sesi')+'</button><button class="btn sm bad" data-mo="del">Hapus sesi</button></div>';
+  h+='</div>';
+  if(cur){
+    h+='<div class="stats"><div><b>'+ps.length+'</b><span>Peserta</span></div><div><b>'+cnt.work+'</b><span>Mengerjakan</span></div><div><b>'+cnt.done+'</b><span>Selesai</span></div><div><b style="color:var(--bad)">'+cnt.lock+'</b><span>Terkunci</span></div></div>';
+    h+='<div class="row" style="margin:8px 0"><span class="small muted">Untuk semua peserta:</span><button class="btn sm" data-mo="a-kunci">Kunci</button><button class="btn sm" data-mo="a-buka">Buka kunci</button><button class="btn sm" data-mo="a-tambah">+10 menit</button><button class="btn sm" data-mo="a-pesan">Pesan</button><button class="btn sm bad" data-mo="a-akhiri">Akhiri semua</button></div>';
+    h+='<div class="tw"><table class="t mt"><thead><tr><th>No</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Sisa</th><th>Skor</th><th>Cek</th><th>Pelang.</th><th>Perangkat/kabel</th><th>Aktif</th><th>Aksi</th></tr></thead><tbody>';
+    if(!ps.length)h+='<tr><td colspan="11" class="muted" style="padding:18px;text-align:center">Belum ada siswa yang masuk. Bagikan token <b>'+esc(cur.token)+'</b>.</td></tr>';
+    for(const p of ps){
+      const[sl,sc]=monStatus(p,now),s=p.state||{},age=Math.max(0,(now-p.terakhir)/1000);
+      const sisa=p.status==='selesai'||s.sisa==null?'-':(s.phase==='run'?fmtS(s.sisa-age):'-');
+      h+='<tr data-pid="'+p.id+'"><td>'+p.absen+'</td><td><b>'+esc(p.nama)+'</b></td><td>'+esc(p.kelas)+'</td><td><span class="pill st-'+sc+'">'+sl+'</span></td><td class="mono">'+sisa+(p.tambah_menit?' <span class="muted">(+'+p.tambah_menit+')</span>':'')+'</td><td class="mono">'+(s.skor!=null?fmt1(s.skor):'-')+'</td><td>'+(s.cek!=null?s.cek:'-')+'</td><td style="color:'+(p.viol?'var(--bad)':'inherit')+'">'+p.viol+'</td><td>'+(s.dev!=null?s.dev+'/'+s.kab:'-')+'</td><td class="muted">'+(age<60?Math.round(age)+' dtk':Math.round(age/60)+' mnt')+'</td><td class="act"><button class="btn sm" data-ma="detail">Detail</button><button class="btn sm" data-ma="'+(p.terkunci?'buka':'kunci')+'">'+(p.terkunci?'Buka':'Kunci')+'</button><button class="btn sm" data-ma="tambah">+10</button><button class="btn sm" data-ma="pesan">Pesan</button>'+(p.status==='selesai'?'':'<button class="btn sm" data-ma="akhiri">Akhiri</button>')+(p.ada_hasil?'<button class="btn sm pri" data-ma="hasil">Periksa</button>':'')+'<button class="btn sm bad" data-ma="reset">Reset</button></td></tr>';
+    }
+    h+='</tbody></table></div>';
+  }else h+='<div class="card muted">Belum ada sesi. Tekan <b>+ Sesi baru</b> untuk membuat token asesmen.</div>';
+  h+='</div>';
+  const keep=m.querySelector('.mb');const sc=keep?keep.scrollTop:0;
+  m.innerHTML=h;const nb=m.querySelector('.mb');if(nb)nb.scrollTop=sc;
+}
+const genTok=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let t='';const a=new Uint8Array(6);(window.crypto||{getRandomValues:x=>x.forEach((_,i)=>x[i]=Math.random()*256)}).getRandomValues(a);for(const b of a)t+=c[b%c.length];return t};
+function cbConfirm(txt,fn,yes){CB.confirmFn=fn;showDlg(dlgShell('Konfirmasi','<p>'+txt+'</p><div class="row"><button class="btn bad" data-g="cbyes">'+(yes||'Ya, lanjutkan')+'</button><button class="btn" data-g="close">Batal</button></div>'),true)}
+function sesiDialog(){
+  const sf=(k,l,t,x)=>'<div class="fld"><label for="sf-'+k+'">'+l+'</label><input id="sf-'+k+'" data-sf="'+k+'" type="'+(t||'text')+'" value="'+esc(x)+'" autocomplete="off"></div>';
+  const ck=(k,l)=>'<label class="row" style="margin-top:4px"><input type="checkbox" data-sf="'+k+'" '+(GP[k]?'checked':'')+'> <span class="small">'+l+'</span></label>';
+  showDlg(dlgShell('Sesi asesmen baru','<div class="g2">'+sf('judul','Judul sesi','text','Asesmen Praktik Sumatif Akhir Semester')+'<div class="fld"><label for="sf-token">Token (huruf besar atau angka)</label><div class="row" style="flex-wrap:nowrap"><input id="sf-token" data-sf="token" value="'+genTok()+'" maxlength="10" style="flex:1;min-width:0;font-family:var(--ff-mono)"><button class="btn sm" data-g="gentok">Acak</button></div></div></div><div class="g2"><div class="fld"><label for="sf-paket">Paket soal</label><select id="sf-paket" data-sf="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A'],['B','B'],['C','C'],['D','D']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+sf('durasi','Durasi (menit)','number',GP.durasi)+'</div><div class="g2">'+sf('maxCek','Jumlah Cek mandiri','number',GP.maxCek)+sf('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number',GP.maxViol)+'</div>'+sf('kelas','Kelas yang boleh masuk (pisahkan koma, kosongkan = semua)','text',GP.kelas)+ck('reqNIS','Wajibkan NIS')+ck('wajibFS','Wajib layar penuh')+ck('blokirSalin','Blokir salin, tempel, dan klik kanan')+ck('allow3D','Boleh tampilan 3D')+ck('allowCLI','Boleh CLI router dan switch')+'<p class="small" id="sf-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="sesibuat">Buat sesi</button></div>'));
+}
+async function sesiBuat(){
+  const v=k=>{const e=$('[data-sf="'+k+'"]');return e?(e.type==='checkbox'?e.checked:e.value):''};
+  const pol={sekolah:GP.sekolah,mapel:GP.mapel,paket:v('paket'),durasi:clamp(parseInt(v('durasi'))||90,30,180),maxCek:clamp(parseInt(v('maxCek')),0,10)||0,maxViol:clamp(parseInt(v('maxViol')),0,20)||0,kelas:String(v('kelas')).trim().slice(0,100),reqNIS:v('reqNIS'),wajibFS:v('wajibFS'),blokirSalin:v('blokirSalin'),allow3D:v('allow3D'),allowCLI:v('allowCLI'),allowAbort:false,allowRedo:false,allowCopy:false};
+  const e=$('#sf-err');
+  try{
+    const s=await rpc('guru_sesi_buat',{p_key:gk(),p_token:String(v('token')).toUpperCase(),p_judul:String(v('judul')).slice(0,80),p_policy:pol});
+    closeDlg();MON.cur=s.id;await monLoadSesi();MON.cur=s.id;await monPoll();toast('Sesi dibuat. Bagikan token '+s.token+'.','good');
+  }catch(x){if(e)e.textContent=errMsg(x.message)}
+}
+async function monAksi(tipe,pid,data){
+  try{const r=await rpc('guru_aksi',{p_key:gk(),p_sesi:MON.cur,p_pid:pid||null,p_tipe:tipe,p_data:data||null});toast('Aksi dikirim ('+r.n+' peserta).','good');await monPoll()}
+  catch(e){toast(errMsg(e.message),'bad')}
+}
+function topoSVG(snapStr){
+  let o;try{o=JSON.parse(snapStr)}catch(e){return '<p class="small muted">Belum ada data jaringan.</p>'}
+  const dv=o.devices||[];if(!dv.length)return '<p class="small muted">Kanvas siswa masih kosong.</p>';
+  let a=1e9,b=-1e9,c=1e9,d=-1e9;for(const x of dv){a=Math.min(a,x.x);b=Math.max(b,x.x);c=Math.min(c,x.y);d=Math.max(d,x.y)}
+  const W=560,H=250,sc=Math.min((W-110)/Math.max(1,b-a),(H-70)/Math.max(1,d-c),1.4),ox=W/2-((a+b)/2)*sc,oy=H/2-((c+d)/2)*sc;
+  const P=id=>{const x=dv.find(q=>q.id===id);return x?[ox+x.x*sc,oy+x.y*sc]:[0,0]};
+  const col={straight:'#2a6bdb',cross:'#d9731a',console:'#0e98a8',fiber:'#b58500',wifi:'#7a5ad0'};
+  let s='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:100%;height:auto;background:var(--stage);border:1px solid var(--line);border-radius:8px" role="img" aria-label="Topologi siswa">';
+  for(const l of o.links||[]){const p=P(l.a.dev),q=P(l.b.dev);s+='<line x1="'+p[0]+'" y1="'+p[1]+'" x2="'+q[0]+'" y2="'+q[1]+'" stroke="'+(l.plugged===false?'#8a95a4':col[l.cable]||'#888')+'" stroke-width="2"'+((l.plugged===false||l.cable==='wifi'||l.cable==='console')?' stroke-dasharray="3 4"':'')+'/>'}
+  for(const x of dv){const p=P(x.id);const ab={pc:'PC',laptop:'LP',server:'SV',printer:'PR',switch:'SW',router:'RT',ap:'AP'}[x.type]||'?';
+    s+='<rect x="'+(p[0]-17)+'" y="'+(p[1]-11)+'" width="34" height="22" rx="4" fill="var(--surface)" stroke="var(--ink)"/><text x="'+p[0]+'" y="'+(p[1]+4)+'" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">'+ab+'</text><text x="'+p[0]+'" y="'+(p[1]+25)+'" text-anchor="middle" font-size="9" fill="var(--ink)">'+esc(x.name)+'</text>'}
+  return s+'</svg>';
+}
+async function monDetail(pid){
+  try{
+    const r=await rpc('guru_detail',{p_key:gk(),p_pid:pid}),p=r.peserta,s=p.state||{};
+    const[sl]=monStatus(Object.assign({},p),r.server_ms);
+    let h='<div class="row"><span class="pill">'+sl+'</span><span class="small muted">Paket '+esc(s.paket||'-')+' · aktif '+Math.round((r.server_ms-p.terakhir)/1000)+' dtk lalu</span></div><table class="t" style="margin:8px 0"><tr><th>Nama</th><td>'+esc(p.nama)+'</td><th>Kelas / absen</th><td>'+esc(p.kelas)+' / '+p.absen+'</td></tr><tr><th>NIS</th><td>'+esc(p.nis||'-')+'</td><th>Skor otomatis</th><td>'+(s.skor!=null?fmt1(s.skor):'-')+' / 70</td></tr><tr><th>Cek mandiri</th><td>'+(s.cek!=null?s.cek:'-')+'</td><th>Pelanggaran</th><td style="color:'+(s.viol?'var(--bad)':'inherit')+'">'+(s.viol||0)+' · layar penuh: '+(s.fs?'ya':'tidak')+'</td></tr></table>';
+    h+='<h3 style="margin:8px 0 4px;font-size:13px">Jaringan siswa saat ini</h3>'+topoSVG(r.snap);
+    h+='<h3 style="margin:10px 0 4px;font-size:13px">Catatan pelanggaran</h3>'+((s.log&&s.log.length)?'<table class="t">'+s.log.map(e=>'<tr><td class="mono">'+esc(e.t)+'</td><td>'+esc(e.ket)+'</td><td>'+(e.n?'#'+e.n:'info')+'</td></tr>').join('')+'</table>':'<p class="small muted">Tidak ada.</p>');
+    h+='<h3 style="margin:10px 0 4px;font-size:13px">Bukti uji terakhir</h3>'+((s.tests&&s.tests.length)?'<table class="t">'+s.tests.map(e=>'<tr><td class="mono">'+esc(e.t)+'</td><td>'+esc(e.dari)+' → '+esc(e.ke)+'</td><td>'+(e.ok?'Berhasil':'Gagal')+'</td></tr>').join('')+'</table>':'<p class="small muted">Belum ada.</p>');
+    showDlg(dlgShell('Detail: '+esc(p.nama),h));
+  }catch(e){toast(errMsg(e.message),'bad')}
+}
+async function monHasil(pid){
+  try{const r=await rpc('guru_detail',{p_key:gk(),p_pid:pid});if(!r.hasil){toast('Belum ada hasil.','warn');return}monClose();verifyObj(r.hasil)}
+  catch(e){toast(errMsg(e.message),'bad')}
+}
+function monCSV(){
+  const d=MON.data;if(!d)return;
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=[['Nama','Kelas','Absen','NIS','Status','Skor otomatis (maks 70)','Pelanggaran','Cek mandiri','Terkunci']].concat(d.peserta.map(p=>[p.nama,p.kelas,p.absen,p.nis,p.status,p.state&&p.state.skor!=null?String(p.state.skor).replace('.',','):'',p.viol,p.state&&p.state.cek!=null?p.state.cek:'',p.terkunci?'ya':'tidak']));
+  const cur=MON.sesi.find(s=>s.id===MON.cur)||{token:'sesi'};
+  saveAny('Rekap_'+cur.token+'.csv','﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
+}
+async function saveAny(name,data,mime){
+  try{const dl=await getDownloads();if(dl){await dl.save({filename:name,data});toast('Berkas disimpan.','good');return}nativeSave(name,data,mime);toast('Berkas diunduh.','good')}
+  catch(e){if(!(e&&e.code==='declined'))toast('Berkas gagal disimpan.','bad')}
+}
+/* ---------- kartu basis data di panel guru ---------- */
+PCH.dbf=el=>{const k=el.dataset.k;if(k in DBC)DBC[k]=String(el.value).trim()};
+PA.dbsave=async()=>{
+  if(DBC.url&&!URLOK(DBC.url)){toast('Alamat harus diawali https://','bad');return}
+  if((DBC.url&&!DBC.key)||(!DBC.url&&DBC.key)){toast('Isi alamat dan kunci publik (anon) sekaligus.','bad');return}
+  saveDBC();
+  try{
+    await rpc('db_ping',{});
+    if(dbRemote()){await rpc('guru_cek',{p_key:DBC.gkey});toast('Basis data terhubung dan kunci guru benar.','good')}
+    else toast('Mode uji coba aktif (satu komputer).','good');
+  }catch(e){toast(errMsg(e.message),'bad')}
+  renderPanel();
+};
+PA.dblocal=()=>{DBC.url='';DBC.key='';DBC.gkey='';saveDBC();toast('Kembali ke mode uji coba.','good');renderPanel()};
+PA.dbcopy=async()=>{
+  if(!dbRemote()){toast('Isi basis data Supabase dulu. Mode uji coba tidak lintas komputer.','warn');return}
+  const link=location.origin+location.pathname+'#cfg='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({u:DBC.url,k:DBC.key})))));
+  showDlg(dlgShell('Tautan siswa','<p class="small muted">Bagikan tautan ini ke siswa (sekali saja per komputer). Berisi alamat dan kunci publik basis data, bukan kunci guru.</p><textarea id="iotxt" rows="5" readonly>'+esc(link)+'</textarea>'),true);
+};
+PA.dbguide=()=>showDlg(dlgShell('Panduan memasang basis data',
+  '<ol class="small" style="padding-left:18px;display:flex;flex-direction:column;gap:6px"><li>Buat akun gratis di supabase.com, lalu buat <b>New project</b>.</li><li>Buka <b>SQL Editor</b>, tempel isi berkas <span class="mono">supabase_setup.sql</span>, <b>ganti</b> teks <span class="mono">GANTI-KUNCI-GURU-INI-DENGAN-ACAK</span> dengan kunci rahasia panjang (minimal 16 karakter), lalu tekan Run.</li><li>Buka <b>Project Settings, API Keys</b>. Salin <b>Project URL</b> dan kunci <b>publishable</b> (atau <b>anon</b>). Jangan salin kunci secret atau service_role.</li><li>Tempel keduanya di kartu Basis data pada tab Guru, isi juga kunci guru yang tadi Anda buat, lalu tekan <b>Simpan dan uji</b>.</li><li>Tekan <b>Salin tautan siswa</b> dan bagikan. Tautan itu menyimpan alamat dan kunci publik di komputer siswa.</li><li>Buka <b>Ruang Pantau</b>, buat sesi baru, lalu bagikan token ke siswa.</li></ol><p class="small muted">Kunci publik memang terlihat siswa. Keamanan ada pada fungsi basis data: tabel tertutup, dan semua aksi guru memerlukan kunci guru. Jangan membagikan kunci guru.</p>'));
+function dbCard(){
+  const rem=dbRemote();
+  return '<div class="card"><h3>Ruang pantau dan basis data</h3><div class="row"><span class="pill '+(rem?'good':'warn')+'">'+(rem?'Supabase terhubung':'Mode uji coba (satu komputer)')+'</span></div><div class="fld" style="margin-top:8px"><label for="db-url">Project URL Supabase</label><input id="db-url" data-in="dbf" data-ch="dbf" data-k="url" value="'+esc(DBC.url)+'" placeholder="https://xxxx.supabase.co" autocomplete="off"></div><div class="fld"><label for="db-key">Anon public key</label><input id="db-key" data-in="dbf" data-ch="dbf" data-k="key" value="'+esc(DBC.key)+'" autocomplete="off"></div><div class="fld"><label for="db-gk">Kunci guru basis data (rahasia)</label><input id="db-gk" type="password" data-in="dbf" data-ch="dbf" data-k="gkey" value="'+esc(DBC.gkey)+'" autocomplete="off"></div><div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="dbsave">Simpan dan uji</button><button class="btn sm" data-act="dbcopy">Salin tautan siswa</button><button class="btn sm" data-act="dbguide">Panduan</button><button class="btn sm" data-act="dblocal">Mode uji coba</button></div><div class="row" style="margin-top:10px"><button class="btn pri" data-act="monopen">Buka Ruang Pantau</button></div></div>';
+}
+PA.monopen=monOpen;
+/* ---------- penghubung ---------- */
+function cbBind(){
+  $('#gate').addEventListener('click',e=>{
+    const t=e.target.closest('[data-gt]');if(t){renderGate(t.dataset.gt,'');return}
+    const g=e.target.closest('[data-gate]');if(g){g.dataset.gate==='siswa'?gateSiswa():gateGuru()}
+  });
+  $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
+  $('#gate').addEventListener('input',e=>{if(e.target.id==='gt-token'||e.target.id==='gt-kelas')e.target.value=e.target.value.toUpperCase()});
+  $('#lockov').addEventListener('click',e=>{if(e.target.closest('[data-lk="fs"]')){try{document.documentElement.requestFullscreen().then(cbOverlay).catch(()=>toast('Layar penuh tidak didukung browser ini.','warn'))}catch(x){}}});
+  $('#cbmsg').addEventListener('click',e=>{if(e.target.closest('[data-lk="msgok"]')){$('#cbmsg').hidden=true}});
+  $('#mon').addEventListener('click',e=>{
+    const a=e.target.closest('[data-ma]');
+    if(a){const pid=a.closest('tr').dataset.pid,t=a.dataset.ma;
+      if(t==='detail')monDetail(pid);else if(t==='hasil')monHasil(pid);
+      else if(t==='kunci'||t==='buka'||t==='akhiri')monAksi(t,pid);
+      else if(t==='tambah')monAksi('tambah',pid,{menit:10});
+      else if(t==='pesan'){MON.msgTo=pid;showDlg(dlgShell('Kirim pesan','<div class="fld"><label for="mon-msg">Pesan untuk siswa</label><textarea id="mon-msg" rows="4" maxlength="300"></textarea></div><div class="row" style="margin-top:8px"><button class="btn pri" data-g="monsend">Kirim</button></div>'),true)}
+      else if(t==='reset'){const nm=a.closest('tr').querySelector('b').textContent;cbConfirm('Reset login <b>'+esc(nm)+'</b>? Pekerjaannya di sesi ini dihapus dan siswa diminta masuk ulang.',()=>monAksi('reset',pid),'Ya, reset')}
+      return}
+    const m=e.target.closest('[data-mo]');if(!m)return;const t=m.dataset.mo;
+    if(t==='close')monClose();else if(t==='new')sesiDialog();else if(t==='csv')monCSV();
+    else if(t==='copytok'){const c=(MON.sesi.find(s=>s.id===MON.cur)||{}).token;try{navigator.clipboard.writeText(c).then(()=>toast('Token disalin.','good'),()=>toast('Salin manual: '+c,'warn'))}catch(x){toast('Salin manual: '+c,'warn')}}
+    else if(t==='toggle'){const c=MON.sesi.find(s=>s.id===MON.cur);rpc('guru_sesi_ubah',{p_key:gk(),p_sesi:MON.cur,p_status:c.status==='buka'?'tutup':'buka'}).then(()=>monLoadSesi()).then(monPoll).catch(x=>toast(errMsg(x.message),'bad'))}
+    else if(t==='del')cbConfirm('Hapus sesi ini beserta semua data pesertanya? Tindakan ini tidak bisa dibatalkan.',()=>rpc('guru_sesi_hapus',{p_key:gk(),p_sesi:MON.cur}).then(()=>monLoadSesi()).then(monPoll).catch(x=>toast(errMsg(x.message),'bad')),'Ya, hapus');
+    else if(t==='a-kunci')monAksi('kunci');else if(t==='a-buka')monAksi('buka');else if(t==='a-tambah')monAksi('tambah',null,{menit:10});
+    else if(t==='a-pesan'){MON.msgTo=null;showDlg(dlgShell('Pesan ke semua peserta','<div class="fld"><label for="mon-msg">Pesan</label><textarea id="mon-msg" rows="4" maxlength="300"></textarea></div><div class="row" style="margin-top:8px"><button class="btn pri" data-g="monsend">Kirim</button></div>'),true)}
+    else if(t==='a-akhiri')cbConfirm('Akhiri asesmen semua peserta yang masih mengerjakan? Hasil mereka dikirim otomatis.',()=>monAksi('akhiri'),'Ya, akhiri semua');
+  });
+  $('#mon').addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.mo==='sel'){MON.cur=e.target.value;MON.data=null;monRender();monPoll()}});
+  $('#dlg').addEventListener('click',e=>{
+    const g=e.target.closest('[data-g]');if(!g)return;const t=g.dataset.g;
+    if(t==='gentok'){const i=$('#sf-token');if(i)i.value=genTok()}
+    else if(t==='sesibuat')sesiBuat();
+    else if(t==='monsend'){const txt=(($('#mon-msg')||{}).value||'').trim();if(!txt){toast('Tulis pesan dulu.','warn');return}closeDlg();monAksi('pesan',MON.msgTo,{teks:txt})}
+    else if(t==='cbyes'){const f=CB.confirmFn;CB.confirmFn=null;closeDlg();if(f)f()}
+  });
+  const bm=$('#b-mon');if(bm)bm.onclick=monOpen;
+  setInterval(cbTick,1000);
+}
+function cbtInit(){
+  loadDBC();cbBind();
+  const old=readSW();
+  if(old&&AS.id.nama===old.ids.nama){
+    SW={pid:old.pid,secret:old.secret,sesi:old.sesi,judul:old.judul,token:old.token,ids:old.ids,policy:old.policy||{},lastMsg:old.lastMsg||0,terkirim:!!old.terkirim};
+    applyPolicy(old.policy);CB.viol=+old.viol||0;CB.base=+old.base||0;
+    ROLE='siswa';hideGate();applyRole();startBeat();if(AS.phase==='run')hardenOn();cbLog('Halaman dimuat ulang',false);beat();cbOverlay();
+  }else showGate()
 }
 /* ================= TAMPILAN 3D ================= */
 const V3={ok:false,inited:false,running:false,dirty:true,th:0.7,ph:1.0,rad:24,tgt:null,ptrs:new Map(),drag:null,anim:null,labelCache:{}};
@@ -2816,6 +3484,7 @@ function boot(){
   try{loaded=loadLocal()}catch(e){}
   if(!loaded||!S.devices.length){loadTemplate('lan',true)}
   if(typeof asesInit==='function')asesInit();
+  if(typeof cbtInit==='function')cbtInit();
   markTabs();markPalette();setTool('select');
   afterChange();
   requestAnimationFrame(()=>requestAnimationFrame(fitView));
