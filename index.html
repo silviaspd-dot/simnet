@@ -236,7 +236,7 @@ table.mt{min-width:860px}table.mt td.act{white-space:nowrap}table.mt .btn.sm{min
   <header class="top">
     <div class="brand">
       <svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true"><rect x="-15" y="-15" width="30" height="30" rx="7" fill="var(--accent)"/><g stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" fill="none"><path d="M-8 6V-4M0 6V-8M8 6V-1"/></g><g fill="var(--accent-ink)"><circle cx="-8" cy="-6" r="2.6"/><circle cx="0" cy="-10" r="2.6"/><circle cx="8" cy="-3" r="2.6"/></g></svg>
-      <div><h1>Simulator Jaringan TJKT</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
+      <div><h1>SimNet</h1><small>Rancang, kabel, konfigurasi, uji ping</small></div>
     </div>
     <span class="pill warn" id="as-badge" hidden></span>
     <span class="pill bad" id="net-badge" hidden>Terputus</span>
@@ -2197,8 +2197,9 @@ function asesTick(){
 /* ---------- panel ---------- */
 const ASF=(k,label,type,extra)=>'<div class="fld"><label for="asf-'+k+'">'+label+'</label><input id="asf-'+k+'" type="'+(type||'text')+'" data-in="asf" data-ch="asf" data-k="'+k+'" value="'+esc(AS.id[k])+'" autocomplete="off" '+(extra||'')+'></div>';
 function panelAses(){
-  if(AS.phase==='run')return asRun();
-  if(AS.phase==='done')return asDone();
+  const id=(typeof cbIdCard==='function')?cbIdCard():'';
+  if(AS.phase==='run')return id+asRun();
+  if(AS.phase==='done')return id+asDone();
   return asIdle();
 }
 function asIdle(){
@@ -2796,7 +2797,7 @@ const URLOK=u=>/^https:\/\/[^\s]+$/.test(u)||/^http:\/\/(localhost|127\.0\.0\.1)
 const DBK='tjkt-db-cfg',SWK='tjkt-siswa-v1',GKK='tjkt-db-gkey',LDB='tjkt-cbt-db';
 const CB={online:true,viol:0,base:0,events:[],busy:false,lastSnap:'',fails:0,locked:false,needFS:false,lastViol:0,sending:false,sendErr:'',auto:false,gateTab:'siswa',confirmFn:null};
 let SW=null,BEAT=0,HD=false;
-const ERRM={jaringan:'Tidak bisa terhubung ke basis data. Periksa koneksi internet.',respons_tidak_valid:'Respons basis data tidak valid. Periksa alamat dan kunci basis data.',penyimpanan:'Penyimpanan browser tidak bisa dipakai (jendela pribadi?).',
+const ERRM={skema_belum_ada:'Fungsi basis data tidak ditemukan. Jalankan supabase_setup.sql di SQL Editor (lihat Panduan), tunggu 1 menit, lalu coba lagi. Periksa juga Project URL.',jaringan:'Tidak bisa terhubung ke basis data. Periksa koneksi internet.',respons_tidak_valid:'Respons basis data tidak valid. Periksa alamat dan kunci basis data.',penyimpanan:'Penyimpanan browser tidak bisa dipakai (jendela pribadi?).',
   token_salah:'Token tidak ditemukan. Periksa token dari guru.',sesi_tutup:'Sesi sudah ditutup guru.',sudah_masuk:'Akun ini sudah masuk di perangkat lain. Minta guru mereset login.',
   kelas_tidak_diizinkan:'Kelas Anda tidak terdaftar pada sesi ini.',nis_wajib:'NIS wajib diisi (minimal 4 karakter).',nama_tidak_valid:'Nama minimal 3 huruf.',kelas_tidak_valid:'Isi kelas.',absen_tidak_valid:'Nomor absen 1 sampai 99.',
   kunci_salah:'Kunci guru basis data salah.',token_dipakai:'Token sudah dipakai sesi lain.',token_tidak_valid:'Token 4 sampai 10 huruf besar atau angka.',peserta_tidak_ada:'Data peserta tidak ditemukan.',rahasia_salah:'Sesi login tidak cocok.',
@@ -2824,7 +2825,7 @@ async function rpc(fn,args){
     txt=await r.text();
   }catch(e){throw new Error('jaringan')}finally{clearTimeout(to)}
   let j;try{j=JSON.parse(txt)}catch(e){j=undefined}
-  if(!r.ok){const m=j&&j.message?String(j.message):'';throw new Error(/^[a-z_]{3,30}$/.test(m)?m:'server_'+r.status)}
+  if(!r.ok){if(r.status===404||(j&&/^PGRST20/.test(String(j.code||''))))throw new Error('skema_belum_ada');const m=j&&j.message?String(j.message):'';throw new Error(/^[a-z_]{3,30}$/.test(m)?m:'server_'+r.status)}
   if(j===undefined)throw new Error('respons_tidak_valid');
   return j;
 }
@@ -2980,6 +2981,21 @@ function cbSendCard(){
   return '<div class="card" style="border-color:var(--warn)"><b>'+(CB.sending?'Mengirim hasil ke guru...':'Hasil belum terkirim ke guru')+'</b>'+(CB.sendErr?'<div class="small" style="color:var(--bad)">'+esc(CB.sendErr)+'</div>':'')+'<div class="small muted">Jangan tutup halaman. Pengiriman diulang otomatis.</div><button class="btn sm pri" data-act="cbresend" '+(CB.sending?'disabled':'')+'>Kirim ulang</button></div>';
 }
 PA.cbresend=()=>sendHasil();
+function cbIdCard(){
+  if(ROLE!=='siswa'||!SW)return '';
+  const i=SW.ids||{},st=AS.phase==='done'?['Selesai','good']:(CB.locked?['Terkunci','bad']:['Sedang ujian','acc']);
+  return '<div class="card" style="padding:10px 12px"><div class="row" style="justify-content:space-between;align-items:center"><b>Data peserta</b><span class="pill st-'+st[1]+'">'+st[0]+'</span></div><table class="t" style="margin-top:6px"><tr><th>Nama</th><td>'+esc(i.nama)+'</td></tr><tr><th>Kelas / absen</th><td>'+esc(i.kelas)+' / '+esc(i.absen)+'</td></tr><tr><th>NIS</th><td>'+esc(i.nis||'-')+'</td></tr><tr><th>Sesi</th><td>'+esc(SW.judul||'-')+' · Paket '+esc(asesPaket())+'</td></tr></table>'+(AS.phase==='done'?'<button class="btn bad" data-act="cblogout" style="width:100%;margin-top:8px">Keluar (logout)</button><div class="small muted" style="margin-top:4px">Tekan setelah laporan PDF dan JSON tersimpan. Data di komputer ini dibersihkan.</div>':'')+'</div>';
+}
+PA.cblogout=()=>{
+  if(ROLE!=='siswa'||AS.phase!=='done')return;
+  const sv=AS.saved||{};
+  const warn=(SW&&SW.terkirim?'':'<b>Hasil belum terkirim ke guru.</b> ')+((sv.pdf&&sv.json)?'':'Laporan PDF atau JSON belum disimpan. ')+'Setelah keluar, laporan tidak bisa disimpan lagi dan Anda tidak dapat mengulang asesmen.';
+  cbConfirm(warn+'<br>Keluar sekarang?',()=>{
+    try{localStorage.removeItem(SWK);localStorage.removeItem('tjkt-net-v1')}catch(e){}
+    asReset();resetState();afterChange();CB.viol=0;CB.base=0;CB.events=[];CB.locked=false;CB.lastSnap='';
+    showGate('Anda sudah keluar. Terima kasih.');
+  },'Ya, keluar');
+};
 const _asfin=PA.asfinish;
 PA.asfinish=()=>{_asfin();if(ROLE==='siswa'&&AS.phase==='done'){hardenOff();CB.locked=false;cbOverlay();sendHasil();beat()}};
 function cbTick(){
@@ -3024,7 +3040,7 @@ async function monOpen(){
   if(ROLE!=='guru')return;
   if(dbRemote()&&!DBC.gkey){toast('Isi kunci guru basis data di tab Guru terlebih dulu.','warn');UI.tab='guru';markTabs();renderPanel();return}
   $('#mon').hidden=false;MON.err='';monRender();
-  try{await monLoadSesi()}catch(e){MON.err=errMsg(e.message)}
+  try{await monLoadSesi();MON.err=''}catch(e){MON.err=errMsg(e.message)}
   await monPoll();clearInterval(MON.timer);MON.timer=setInterval(monPoll,4000);
 }
 function monClose(){clearInterval(MON.timer);MON.timer=0;$('#mon').hidden=true}
@@ -3035,8 +3051,7 @@ async function monLoadSesi(){
 async function monPoll(){
   if(MON.busy||$('#mon').hidden)return;MON.busy=true;
   try{
-    if(MON.cur){MON.data=await rpc('guru_pantau',{p_key:gk(),p_sesi:MON.cur})}else MON.data=null;
-    MON.err='';
+    if(MON.cur){MON.data=await rpc('guru_pantau',{p_key:gk(),p_sesi:MON.cur});MON.err=''}else MON.data=null;
   }catch(e){MON.err=errMsg(e.message);if(e.message==='sesi_tidak_ada'){try{await monLoadSesi()}catch(x){}}}
   finally{MON.busy=false}
   monRender();
@@ -3155,7 +3170,7 @@ PA.dbcopy=async()=>{
   showDlg(dlgShell('Tautan siswa','<p class="small muted">Bagikan tautan ini ke siswa (sekali saja per komputer). Berisi alamat dan kunci publik basis data, bukan kunci guru.</p><textarea id="iotxt" rows="5" readonly>'+esc(link)+'</textarea>'),true);
 };
 PA.dbguide=()=>showDlg(dlgShell('Panduan memasang basis data',
-  '<ol class="small" style="padding-left:18px;display:flex;flex-direction:column;gap:6px"><li>Buat akun gratis di supabase.com, lalu buat <b>New project</b>.</li><li>Buka <b>SQL Editor</b>, tempel isi berkas <span class="mono">supabase_setup.sql</span>, <b>ganti</b> teks <span class="mono">GANTI-KUNCI-GURU-INI-DENGAN-ACAK</span> dengan kunci rahasia panjang (minimal 16 karakter), lalu tekan Run.</li><li>Buka <b>Project Settings, API Keys</b>. Salin <b>Project URL</b> dan kunci <b>publishable</b> (atau <b>anon</b>). Jangan salin kunci secret atau service_role.</li><li>Tempel keduanya di kartu Basis data pada tab Guru, isi juga kunci guru yang tadi Anda buat, lalu tekan <b>Simpan dan uji</b>.</li><li>Tekan <b>Salin tautan siswa</b> dan bagikan. Tautan itu menyimpan alamat dan kunci publik di komputer siswa.</li><li>Buka <b>Ruang Pantau</b>, buat sesi baru, lalu bagikan token ke siswa.</li></ol><p class="small muted">Kunci publik memang terlihat siswa. Keamanan ada pada fungsi basis data: tabel tertutup, dan semua aksi guru memerlukan kunci guru. Jangan membagikan kunci guru.</p>'));
+  '<ol class="small" style="padding-left:18px;display:flex;flex-direction:column;gap:6px"><li>Buat akun gratis di supabase.com, lalu buat <b>New project</b>.</li><li>Buka <b>SQL Editor</b>, tempel isi berkas <span class="mono">supabase_setup.sql</span>, <b>ganti</b> teks <span class="mono">GANTI-KUNCI-GURU-INI-DENGAN-ACAK</span> dengan kunci rahasia panjang (minimal 16 karakter), lalu tekan Run. Harus muncul <i>Success</i>. Bila muncul tulisan merah, ada yang salah, kirimkan ke saya.</li><li>Buka <b>Project Settings, API Keys</b>. Salin <b>Project URL</b> dan kunci <b>publishable</b> (atau <b>anon</b>). Jangan salin kunci secret atau service_role.</li><li>Tempel keduanya di kartu Basis data pada tab Guru, isi juga kunci guru yang tadi Anda buat, lalu tekan <b>Simpan dan uji</b>.</li><li>Tekan <b>Salin tautan siswa</b> dan bagikan. Tautan itu menyimpan alamat dan kunci publik di komputer siswa.</li><li>Buka <b>Ruang Pantau</b>, buat sesi baru, lalu bagikan token ke siswa.</li></ol><p class="small muted">Kunci publik memang terlihat siswa. Keamanan ada pada fungsi basis data: tabel tertutup, dan semua aksi guru memerlukan kunci guru. Jangan membagikan kunci guru.</p>'));
 function dbCard(){
   const rem=dbRemote();
   return '<div class="card"><h3>Ruang pantau dan basis data</h3><div class="row"><span class="pill '+(rem?'good':'warn')+'">'+(rem?'Supabase terhubung':'Mode uji coba (satu komputer)')+'</span></div><div class="fld" style="margin-top:8px"><label for="db-url">Project URL Supabase</label><input id="db-url" data-in="dbf" data-ch="dbf" data-k="url" value="'+esc(DBC.url)+'" placeholder="https://xxxx.supabase.co" autocomplete="off"></div><div class="fld"><label for="db-key">Anon public key</label><input id="db-key" data-in="dbf" data-ch="dbf" data-k="key" value="'+esc(DBC.key)+'" autocomplete="off"></div><div class="fld"><label for="db-gk">Kunci guru basis data (rahasia)</label><input id="db-gk" type="password" data-in="dbf" data-ch="dbf" data-k="gkey" value="'+esc(DBC.gkey)+'" autocomplete="off"></div><div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="dbsave">Simpan dan uji</button><button class="btn sm" data-act="dbcopy">Salin tautan siswa</button><button class="btn sm" data-act="dbguide">Panduan</button><button class="btn sm" data-act="dblocal">Mode uji coba</button></div><div class="row" style="margin-top:10px"><button class="btn pri" data-act="monopen">Buka Ruang Pantau</button></div></div>';
