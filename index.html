@@ -2856,7 +2856,21 @@ function loadDBC(){
   }catch(e){}
 }
 function saveDBC(){try{localStorage.setItem(DBK,JSON.stringify({url:DBC.url,key:DBC.key}))}catch(e){}}
+let CFGP=Promise.resolve();
+/* config.json di folder yang sama dengan index.html: cara termudah menghubungkan semua perangkat tanpa mengubah index.html */
+async function loadCfgFile(){
+  if(DBC.url||!/^https?:$/.test(location.protocol))return;
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),4000);
+    const r=await fetch('config.json?t='+Date.now(),{cache:'no-store',signal:ctl.signal});clearTimeout(to);
+    if(!r.ok)return;
+    const o=await r.json();
+    if(o&&typeof o.url==='string'&&typeof o.key==='string'&&URLOK(o.url)&&o.key&&!DBC.url){DBC.url=o.url.replace(/\/+$/,'');DBC.key=o.key}
+  }catch(e){}
+}
+const HINT_DB=' Jika token/PIN sudah benar, perangkat ini belum terhubung ke basis data sekolah. Minta guru membagikan tautan perangkat.';
 async function rpc(fn,args){
+  await CFGP;
   if(!dbRemote())return localRpc(fn,args);
   const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
   let r,txt;
@@ -2926,7 +2940,7 @@ async function gateSiswa(){
     const r=await rpc('siswa_gabung',{p_token:token,p_nama:nama,p_kelas:kelas,p_absen:absen,p_nis:nis,p_rid:rid});
     try{localStorage.removeItem('tjkt-pending')}catch(e){}
     siswaMasuk(r,{nama,kelas,absen,nis},token,old&&old.secret===rid?old:null);
-  }catch(e){gerr(errMsg(e.message));if(btn)btn.disabled=false;if(document.fullscreenElement)try{document.exitFullscreen()}catch(x){}}
+  }catch(e){gerr(errMsg(e.message)+((!dbRemote()&&e.message==='token_salah')?HINT_DB:''));if(btn)btn.disabled=false;if(document.fullscreenElement)try{document.exitFullscreen()}catch(x){}}
 }
 function siswaMasuk(r,ids,token,old){
   SW={pid:r.pid,secret:r.secret,sesi:r.sesi_id,judul:r.judul,token,ids,policy:r.policy||{},lastMsg:old?old.lastMsg||0:0,terkirim:old?!!old.terkirim:false};
@@ -2953,8 +2967,8 @@ async function gateGuru(){
     if(!r||!r.ok)throw new Error((r&&r.galat)||'pin_salah');
     DBC.gkey=dbRemote()?r.key:'';PINDEF=!!r.pin_default;PERAN=r.peran;PNAMA=r.nama||'';ADM.list=null;ADM.err='';
     ROLE='guru';stopBeat();hardenOff();hideGate();UI.tab='guru';applyRole();toast('Mode guru aktif.','good');
-  }catch(e){gerr(errMsg(e.message));const i=$('#gt-pin');if(i){i.value='';i.focus()}}
-  finally{GG_BUSY=false;const b2=$('#gt-go');if(b2){b2.disabled=false;b2.textContent='Masuk sebagai guru'}}
+  }catch(e){gerr(errMsg(e.message)+((!dbRemote()&&e.message==='pin_salah')?HINT_DB:''));const i=$('#gt-pin');if(i){i.value='';i.focus()}}
+  finally{GG_BUSY=false;const b2=$('#gt-go');if(b2){b2.disabled=false;b2.textContent='Login'}}
 }
 /* ---------- detak siswa ---------- */
 function cbState(){
@@ -3222,8 +3236,8 @@ PA.dbsave=async()=>{
 };
 PA.dblocal=()=>{if(PERAN!=='admin'){toast('Hanya admin yang dapat mengubah basis data.','warn');return}DBC.url='';DBC.key='';DBC.gkey='';saveDBC();toast('Kembali ke mode uji coba. Masuk kembali dengan PIN.','good');setTimeout(exitGuru,1200)};
 PA.dbline=async()=>{
-  const line="const DB_DEFAULT={url:'"+DBC.url+"',key:'"+DBC.key+"'};";
-  showDlg(dlgShell('Agar semua perangkat terhubung','<p class="small muted">Buka berkas <b>index.html</b> di repositori GitHub, cari baris yang diawali <span class="mono">const DB_DEFAULT</span>, ganti seluruh baris itu dengan teks di bawah, lalu simpan (commit). Setelah itu semua browser dan perangkat, termasuk milik guru lain dan siswa, otomatis terhubung tanpa tautan khusus. Aman dibagikan: hanya berisi alamat dan kunci publik.</p><textarea id="iotxt" rows="4" readonly>'+esc(line)+'</textarea>'),true);
+  const cfg=JSON.stringify({url:DBC.url,key:DBC.key},null,1);
+  showDlg(dlgShell('Hubungkan semua perangkat','<p class="small"><b>Cara termudah (tanpa mengubah index.html):</b> di repositori GitHub tekan <b>Add file</b> lalu <b>Create new file</b>, beri nama <b>config.json</b> (satu folder dengan index.html), tempel teks di bawah, lalu <b>Commit</b>. Tunggu sekitar 1 menit, lalu buka ulang situs dengan Ctrl+F5. Semua browser, perangkat guru, dan siswa otomatis terhubung. Isinya hanya alamat dan kunci publik, aman dibagikan.</p><textarea id="iotxt" rows="4" readonly>'+esc(cfg)+'</textarea><p class="small muted" style="margin-top:8px">Alternatif: ganti baris <span class="mono">const DB_DEFAULT</span> di index.html dengan baris ini:</p><textarea rows="3" readonly>'+esc("const DB_DEFAULT={url:'"+DBC.url+"',key:'"+DBC.key+"'};")+'</textarea><p class="small muted" style="margin-top:8px">Sementara itu, tombol <b>Salin tautan siswa</b> membuat tautan yang menghubungkan satu perangkat sekali buka.</p>'),true);
 };
 PA.dbcopy=async()=>{
   if(!dbRemote()){toast('Isi basis data Supabase dulu. Mode uji coba tidak lintas komputer.','warn');return}
@@ -3235,7 +3249,7 @@ PA.dbguide=()=>showDlg(dlgShell('Panduan memasang basis data',
 function dbCard(){
   const rem=dbRemote(),adm=PERAN==='admin';
   let h='<div class="card"><h3>Ruang pantau dan basis data</h3><div class="row"><span class="pill '+(rem?'good':'warn')+'">'+(rem?'Supabase terhubung':'Mode uji coba (satu komputer)')+'</span></div>';
-  if(!rem&&adm)h+='<p class="small" style="margin:8px 0 0">Mode ini hanya berlaku di browser ini. Isi data Supabase di bawah agar guru dan siswa di perangkat mana pun terhubung.</p>';
+  if(!rem)h+='<p class="small" style="margin:8px 0 0;color:var(--bad)" role="alert"><b>Perangkat ini belum terhubung ke Supabase.</b> Sesi dan akun guru yang dibuat di sini tidak terlihat oleh siswa atau guru di perangkat lain (mereka akan melihat "Token tidak ditemukan").'+(adm?' Isi data Supabase di bawah, lalu tekan Pasang untuk semua perangkat.':' Hubungi guru admin.')+'</p>';
   if(adm)h+='<div class="fld" style="margin-top:8px"><label for="db-url">Project URL Supabase</label><input id="db-url" data-in="dbf" data-ch="dbf" data-k="url" value="'+esc(DBC.url)+'" placeholder="https://xxxx.supabase.co" autocomplete="off"></div><div class="fld"><label for="db-key">Anon public key</label><input id="db-key" data-in="dbf" data-ch="dbf" data-k="key" value="'+esc(DBC.key)+'" autocomplete="off"></div><div class="row" style="margin-top:8px"><button class="btn sm pri" data-act="dbsave">Simpan dan uji</button>'+(rem?'<button class="btn sm" data-act="dbline">Pasang untuk semua perangkat</button>':'')+'<button class="btn sm" data-act="dbcopy">Salin tautan siswa</button><button class="btn sm" data-act="dbguide">Panduan</button><button class="btn sm" data-act="dblocal">Mode uji coba</button></div>';
   h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="monopen">Buka Ruang Pantau</button></div></div>';
   return h;
@@ -3324,7 +3338,7 @@ function cbBind(){
   setInterval(()=>{cbTick();alarmTick()},1000);
 }
 function cbtInit(){
-  loadDBC();cbBind();
+  loadDBC();CFGP=loadCfgFile();cbBind();
   const old=readSW();
   if(old&&AS.id.nama===old.ids.nama){
     SW={pid:old.pid,secret:old.secret,sesi:old.sesi,judul:old.judul,token:old.token,ids:old.ids,policy:old.policy||{},lastMsg:old.lastMsg||0,terkirim:!!old.terkirim};
