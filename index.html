@@ -2813,9 +2813,9 @@ function drawTopo(pdf,snap,h){
   const bw=Math.max(1,mxx-mnx),bh=Math.max(1,mxy-mny),padX=48,padT=26,padB=56;
   const s=Math.min((w-padX*2)/bw,(h-padT-padB)/bh,1.3);
   const ox=x0+w/2-((mnx+mxx)/2)*s,oy=y0+padT+(h-padT-padB)/2-((mny+mxy)/2)*s;
-  const P2=id=>{const d=devs.find(q=>q.id===id);return[ox+d.x*s,oy+d.y*s]};
-  for(const l of snap.links){
-    const a=P2(l.a.dev),b=P2(l.b.dev);
+  const P2=id=>{const d=devs.find(q=>q.id===id);return d?[ox+d.x*s,oy+d.y*s]:null};
+  for(const l of snap.links||[]){
+    const a=P2(l.a.dev),b=P2(l.b.dev);if(!a||!b)continue;
     pdf.line(a[0],a[1],b[0],b[1],{w:1.4,color:l.plugged===false?'#8a95a4':CABHEX[l.cable],dash:(l.plugged===false||l.cable==='console'||l.cable==='wifi')?'2 3':(l.cable==='cross'?'5 3':null)});
   }
   for(const d of devs){
@@ -3268,7 +3268,7 @@ function saveSW(){try{if(SW)localStorage.setItem(SWK,JSON.stringify({pid:SW.pid,
 function readSW(){try{const o=JSON.parse(localStorage.getItem(SWK)||'null');return o&&o.pid&&o.secret&&o.ids?o:null}catch(e){return null}}
 function clearSW(){try{localStorage.removeItem(SWK)}catch(e){}}
 const POLKEYS=()=>Object.keys(GP_DEF).filter(k=>k!=='pin');
-function applyPolicy(p){if(!p||typeof p!=='object')return;for(const k of POLKEYS())if(p[k]!=null&&typeof p[k]===typeof GP_DEF[k])GP[k]=p[k]}
+function applyPolicy(p){for(const k of POLKEYS())GP[k]=GP_DEF[k];if(!p||typeof p!=='object')return;for(const k of POLKEYS())if(p[k]!=null&&typeof p[k]===typeof GP_DEF[k])GP[k]=p[k]}
 /* ---------- gerbang login ---------- */
 function showGate(note){
   ROLE='tamu';SW=null;stopBeat();hardenOff();CB.locked=false;CB.needFS=false;cbOverlay();
@@ -3320,8 +3320,12 @@ function siswaMasuk(r,ids,token,old){
   if(!same){
     CB.events=[];CB.auto=false;CB.lastSnap='';
     asReset();
-    Object.assign(AS.id,{nama:ids.nama,kelas:ids.kelas,absen:ids.absen,nis:ids.nis});
+    Object.assign(AS.id,{sekolah:GP.sekolah,mapel:GP.mapel,paket:GP.paket,durasi:GP.durasi,tanggal:GP.tanggal||'',nama:ids.nama,kelas:ids.kelas,absen:ids.absen,nis:ids.nis});
     UI.tab='ases';saveAses();
+  }else if(AS.phase==='run'&&SW.masuk){
+    const elapsed=Math.max(0,(Date.now()+(CB.skew||0))-SW.masuk);
+    if(elapsed>0)AS.start=Date.now()-elapsed;
+    AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;saveAses();
   }
   saveSW();hideGate();applyRole();startBeat();hardenOn();beat();cbOverlay();
 }
@@ -3432,7 +3436,7 @@ function cbLog(ket,hitung){
   CB.events.unshift({t:hhmm(),ket,n:hitung?CB.viol:0});if(CB.events.length>20)CB.events.pop();
 }
 function addViol(ket){
-  if(!hdOn())return;
+  if(!hdOn()||CB.locked)return;
   const n=Date.now();if(n-CB.lastViol<2500)return;CB.lastViol=n;
   CB.viol++;cbLog(ket,true);saveSW();toast('Pelanggaran dicatat: '+ket,'warn');
   const kunci=GP.maxViol>0&&CB.viol-CB.base>=GP.maxViol;
@@ -3441,7 +3445,7 @@ function addViol(ket){
   beat();
 }
 const hVis=()=>{if(document.visibilityState==='hidden')addViol('Berpindah tab atau jendela')};
-let hbT=0;const hBlur=()=>{clearTimeout(hbT);hbT=setTimeout(()=>{if(hdOn()&&!document.hasFocus())addViol('Jendela kehilangan fokus')},900)};
+let hbT=0;const hBlur=()=>{clearTimeout(hbT);hbT=setTimeout(()=>{if(hdOn()&&!CB.locked&&!document.hasFocus()&&document.visibilityState!=='hidden')addViol('Jendela kehilangan fokus')},1200)};
 const hFS=()=>{if(hdOn()&&GP.wajibFS&&document.fullscreenEnabled&&!document.fullscreenElement)addViol('Keluar dari layar penuh');cbOverlay()};
 const hBlock=e=>{if(hdOn()&&GP.blokirSalin){e.preventDefault();cbLog('Mencoba '+({contextmenu:'klik kanan',copy:'menyalin',cut:'memotong',paste:'menempel',dragstart:'menyeret'}[e.type]||e.type),false)}};
 const hKey=e=>{if(!hdOn())return;const k=e.key;if(k==='F12'||(e.ctrlKey&&e.shiftKey&&/^[ijc]$/i.test(k))||(e.ctrlKey&&/^[usp]$/i.test(k))){e.preventDefault();cbLog('Menekan pintasan '+(e.ctrlKey?'Ctrl+':'')+k,false)}};
@@ -3730,6 +3734,7 @@ function cbtInit(){
   if(old&&AS.id.nama===old.ids.nama){
     SW={pid:old.pid,secret:old.secret,sesi:old.sesi,judul:old.judul,token:old.token,ids:old.ids,policy:old.policy||{},lastMsg:old.lastMsg||0,terkirim:!!old.terkirim};
     applyPolicy(old.policy);CB.viol=+old.viol||0;CB.base=+old.base||0;
+    if(AS.phase==='idle')Object.assign(AS.id,{sekolah:GP.sekolah,mapel:GP.mapel,paket:GP.paket,durasi:GP.durasi,tanggal:GP.tanggal||''});
     ROLE='siswa';hideGate();applyRole();startBeat();if(AS.phase==='run')hardenOn();cbLog('Halaman dimuat ulang',false);beat();cbOverlay();
   }else showGate()
 }
@@ -4061,3 +4066,5 @@ function boot(){
 }
 boot();
 </script>
+</body>
+</html>
