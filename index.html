@@ -344,10 +344,10 @@ function mkPorts(t){
 }
 function blankDevice(t,id,n){
   const d={id,type:t,name:t,x:0,y:0,power:true,ports:mkPorts(t),ifaces:{},mac:mkMac(n)};
-  for(const p of d.ports)if(p.m==='copper'||p.m==='fiber')d.ifaces[p.n]={ip:'',mask:'',shut:t==='router',mode:'access',vlan:1,desc:''};
+  for(const p of d.ports)if(p.m==='copper'||p.m==='fiber')d.ifaces[p.n]={ip:'',mask:'',shut:t==='router',mode:'access',vlan:1,desc:'',allowed:null,native:1};
   if(isHost(t))d.host={ip:'',mask:'',gw:'',dns:''};
   if(t==='switch'){d.vlans={1:'default'};d.svi={ip:'',mask:'',shut:false};d.gw=''}
-  if(t==='router')d.routes=[];
+  if(t==='router'){d.routes=[];d.subs={};d.rip=null}
   if(t==='server')d.http={on:true,page:'Halo! Ini halaman web dari Server.'};
   if(t==='ap')d.ssid='TJKT-LAB';
   return d;
@@ -377,6 +377,27 @@ function linkState(l){
   return 'up';
 }
 const ifaceUp=(d,pn)=>linksAt(d.id,pn).some(linkUp)&&portAdmin(d,pn);
+/* subinterface router (router-on-a-stick): d.subs[nama]={parent,vlan,ip,mask,shut,desc} */
+const ifObj=(d,pn)=>(d.ifaces&&d.ifaces[pn])||(d.subs&&d.subs[pn])||null;
+const isSub=(d,pn)=>!!(d.subs&&d.subs[pn]);
+function ifUp(d,pn){
+  const s=d.subs&&d.subs[pn];
+  if(s){const pf=d.ifaces[s.parent];return !!pf&&!pf.shut&&!s.shut&&s.vlan>0&&ifaceUp(d,s.parent)}
+  return ifaceUp(d,pn);
+}
+const ifNames=d=>d.ports.filter(p=>d.ifaces[p.n]).map(p=>p.n).concat(d.subs?Object.keys(d.subs).sort():[]);
+/* daftar VLAN yang diizinkan di trunk: null = semua, {inc:[..]} atau {exc:[..]} */
+function vlanOK(f,v){const a=f.allowed;if(!a)return true;if(a.inc)return a.inc.includes(v);if(a.exc)return !a.exc.includes(v);return true}
+function vlanRange(list){
+  const a=[...new Set(list)].sort((x,y)=>x-y),o=[];
+  for(let i=0;i<a.length;){let j=i;while(j+1<a.length&&a[j+1]===a[j]+1)j++;o.push(j>i?a[i]+'-'+a[j]:String(a[i]));i=j+1}
+  return o.join(',')||'none';
+}
+function allowedText(f){
+  const a=f.allowed;if(!a)return'1-4094';
+  if(a.inc)return vlanRange(a.inc);
+  const ex=new Set(a.exc),l=[];for(let i=1;i<=4094;i++)if(!ex.has(i))l.push(i);return vlanRange(l);
+}
 function connectPorts(cable,a,b){
   const da=dev(a.dev),db=dev(b.dev);
   if(!da||!db)return{ok:false,msg:'Perangkat tidak ditemukan.'};
@@ -429,23 +450,31 @@ function l2Reach(sid,sport){
   };
   if(sport==='Vlan1'){
     if(!S0.vlans||!S0.vlans[1])return out;
-    for(const p of S0.ports){if(p.m==='console')continue;const f=S0.ifaces[p.n];if(!f)continue;if(f.mode==='trunk'||f.vlan===1)push(sid,p.n,null,[sid])}
-  }else push(sid,sport,null,[sid]);
+    for(const p of S0.ports){if(p.m==='console')continue;const f=S0.ifaces[p.n];if(!f)continue;
+      if(f.mode==='trunk'){if(vlanOK(f,1))push(sid,p.n,(f.native||1)===1?null:1,[sid])}else if(f.vlan===1)push(sid,p.n,null,[sid])}
+  }else if(S0.type==='router'&&S0.subs&&S0.subs[sport]){const sb=S0.subs[sport];push(sid,sb.parent,sb.vlan,[sid])}
+  else push(sid,sport,null,[sid]);
   let guard=0;
   while(q.length&&guard++<4000){
     const it=q.shift(),d=dev(it.dev);if(!d||!d.power)continue;
     const key=it.dev+'|'+it.port+'|'+it.tag+'|'+it.lk;if(seen.has(key))continue;seen.add(key);
-    if(isHost(d.type)||d.type==='router'){if(it.tag==null&&d.id!==sid)out.push({dev:d.id,port:it.port,path:it.path});continue}
+    if(d.type==='router'){
+      if(d.id===sid)continue;
+      if(it.tag==null)out.push({dev:d.id,port:it.port,path:it.path});
+      else{const sn=Object.keys(d.subs||{}).find(n=>d.subs[n].parent===it.port&&d.subs[n].vlan===it.tag);if(sn)out.push({dev:d.id,port:sn,path:it.path})}
+      continue;
+    }
+    if(isHost(d.type)){if(it.tag==null&&d.id!==sid)out.push({dev:d.id,port:it.port,path:it.path});continue}
     if(d.type==='switch'){
       const ing=d.ifaces[it.port];if(!ing)continue;
       let v;
-      if(ing.mode==='trunk')v=(it.tag==null?1:it.tag);else{if(it.tag!=null)continue;v=ing.vlan}
+      if(ing.mode==='trunk'){v=(it.tag==null?(ing.native||1):it.tag);if(!vlanOK(ing,v))continue}else{if(it.tag!=null)continue;v=ing.vlan}
       if(!d.vlans[v])continue;
       if(v===1&&d.svi.ip&&!d.svi.shut&&d.id!==sid)out.push({dev:d.id,port:'Vlan1',path:it.path});
       for(const p of d.ports){
         if(p.n===it.port||p.m==='console')continue;
         const f=d.ifaces[p.n];if(!f)continue;
-        let t;if(f.mode==='trunk')t=(v===1?null:v);else if(f.vlan===v)t=null;else continue;
+        let t;if(f.mode==='trunk'){if(!vlanOK(f,v))continue;t=(v===(f.native||1)?null:v)}else if(f.vlan===v)t=null;else continue;
         push(d.id,p.n,t,it.path);
       }
     }else if(d.type==='ap'){
@@ -461,29 +490,29 @@ function l2Reach(sid,sport){
 function ownsIpAt(d,port,ip){
   if(!d||ip2n(ip)===null)return false;
   if(isHost(d.type))return d.host.ip===ip;
-  if(d.type==='router'){const f=d.ifaces[port];return !!f&&f.ip===ip&&!f.shut}
+  if(d.type==='router'){const f=ifObj(d,port);if(!f||f.ip!==ip||f.shut)return false;if(isSub(d,port)&&d.ifaces[f.parent].shut)return false;return true}
   if(d.type==='switch')return port==='Vlan1'&&d.svi.ip===ip&&!d.svi.shut;
   return false;
 }
 function ownsIp(d,ip){
   if(ip2n(ip)===null)return false;
   if(isHost(d.type))return d.host.ip===ip;
-  if(d.type==='router')return d.ports.some(p=>{const f=d.ifaces[p.n];return f&&f.ip===ip&&!f.shut&&ifaceUp(d,p.n)});
+  if(d.type==='router')return ifNames(d).some(n=>{const f=ifObj(d,n);return f&&f.ip===ip&&!f.shut&&ifUp(d,n)});
   if(d.type==='switch')return d.svi.ip===ip&&!d.svi.shut;
   return false;
 }
 function ipAt(d,port){
   if(isHost(d.type))return d.host.ip;
-  if(d.type==='router')return d.ifaces[port]?d.ifaces[port].ip:'';
+  if(d.type==='router'){const f=ifObj(d,port);return f?f.ip:''}
   if(d.type==='switch')return d.svi.ip;
   return '';
 }
 function connected(d,ip){
   let best=null;
-  for(const p of d.ports){
-    const f=d.ifaces[p.n];
-    if(!f||ip2n(f.ip)===null||!maskOK(f.mask)||f.shut||!ifaceUp(d,p.n))continue;
-    if(sameNet(f.ip,ip,f.mask)){const len=cidr(f.mask);if(!best||len>best.len)best={port:p.n,len}}
+  for(const n of ifNames(d)){
+    const f=ifObj(d,n);
+    if(!f||ip2n(f.ip)===null||!maskOK(f.mask)||f.shut||!ifUp(d,n))continue;
+    if(sameNet(f.ip,ip,f.mask)){const len=cidr(f.mask);if(!best||len>best.len)best={port:n,len}}
   }
   return best;
 }
@@ -499,7 +528,8 @@ function routeFor(d,dst){
     const c=connected(d,dst);
     if(c)return{port:c.port,next:dst,direct:true};
     let rb=null;
-    for(const r of d.routes)if(sameNet(r.net,dst,r.mask)){const len=cidr(r.mask);if(!rb||len>rb.len)rb={via:r.via,len}}
+    for(const r of d.routes)if(sameNet(r.net,dst,r.mask)){const len=cidr(r.mask);if(!rb||len>rb.len)rb={via:r.via,len,ad:1}}
+    for(const r of ripRoutesFor(d))if(sameNet(r.net,dst,r.mask)){const len=cidr(r.mask);if(!rb||len>rb.len||(len===rb.len&&rb.ad>120))rb={via:r.via,len,ad:120}}
     if(!rb)return{err:'tidak ada rute ke jaringan tujuan di tabel routing'};
     const c2=connected(d,rb.via);
     if(!c2)return{err:'next-hop '+rb.via+' tidak berada di jaringan yang terhubung langsung'};
@@ -514,6 +544,60 @@ function routeFor(d,dst){
   }
   return{err:'perangkat ini tidak bisa mengirim paket IP',local:true};
 }
+/* ================= RIP v1/v2 (routing dinamis) ================= */
+const classfulMask=ip=>{const a=(ip2n(ip)||0)>>>24;return a<128?'255.0.0.0':a<192?'255.255.0.0':'255.255.255.0'};
+const classfulNet=ip=>netOf(ip,classfulMask(ip));
+const RIPC={key:null,tbl:{}};
+function ripKey(){return JSON.stringify([S.links.map(l=>[l.a,l.b,l.plugged,l.cable]),S.devices.filter(d=>d.type==='router'||d.type==='switch'||d.type==='ap').map(d=>[d.id,d.power,d.ifaces,d.subs,d.rip,d.vlans])])}
+function ripCompute(){
+  const rs=S.devices.filter(d=>d.type==='router'&&d.power&&d.rip&&d.rip.on),T={},part={},conn={};
+  for(const r of rs){
+    T[r.id]={};part[r.id]=[];conn[r.id]=new Set();
+    for(const n of ifNames(r)){
+      const f=ifObj(r,n);
+      if(!f||ip2n(f.ip)===null||!maskOK(f.mask)||f.shut||!ifUp(r,n))continue;
+      conn[r.id].add(netOf(f.ip,f.mask)+'/'+cidr(f.mask));
+      if(!r.rip.networks.some(x=>ip2n(x)!==null&&classfulNet(f.ip)===classfulNet(x)))continue;
+      part[r.id].push({n,f,passive:(r.rip.passive||[]).includes(n)});
+    }
+  }
+  const edges=[];
+  for(const a of rs)for(const pa of part[a.id]){
+    if(pa.passive)continue;
+    for(const e of l2Reach(a.id,pa.n)){
+      const b=dev(e.dev);if(!b||!T[b.id]||b.id===a.id)continue;
+      const pb=part[b.id].find(p=>p.n===e.port);if(!pb||pb.passive)continue;
+      if(!(pa.f.mask===pb.f.mask&&sameNet(pa.f.ip,pb.f.ip,pa.f.mask)))continue;
+      edges.push({a:a.id,pa,b:b.id,pb});
+    }
+  }
+  const adv=(bid,pb)=>{
+    const B=dev(bid),m=new Map(),sum=B.rip.version===1||B.rip.autoSum!==false;
+    const add=(net,mask,metric)=>{
+      if(sum&&classfulNet(net)!==classfulNet(pb.f.ip)&&cidr(mask)>cidr(classfulMask(net))){mask=classfulMask(net);net=classfulNet(net)}
+      const k=net+'/'+cidr(mask),o=m.get(k);if(!o||metric<o.metric)m.set(k,{net,mask,metric});
+    };
+    for(const p of part[bid])add(netOf(p.f.ip,p.f.mask),p.f.mask,0);
+    for(const r of Object.values(T[bid]))if(r.ifn!==pb.n)add(r.net,r.mask,r.metric);
+    return[...m.values()];
+  };
+  for(let round=0;round<17;round++){
+    let ch=false;
+    for(const e of edges){
+      for(const x of adv(e.b,e.pb)){
+        const metric=x.metric+1;if(metric>=16)continue;
+        const k=x.net+'/'+cidr(x.mask);
+        if(conn[e.a].has(k))continue;
+        const cur=T[e.a][k];
+        if(!cur||metric<cur.metric){T[e.a][k]={net:x.net,mask:x.mask,metric,via:e.pb.f.ip,ifn:e.pa.n,from:e.b};ch=true}
+      }
+    }
+    if(!ch)break;
+  }
+  return T;
+}
+function ripTables(){const k=ripKey();if(RIPC.key!==k){RIPC.tbl=ripCompute();RIPC.key=k}return RIPC.tbl}
+function ripRoutesFor(d){if(d.type!=='router'||!d.rip||!d.rip.on)return[];return Object.values(ripTables()[d.id]||{})}
 function deliver(sid,dst,noArp){
   const R={ok:false,path:[sid],hops:[],srcIp:null,arpMiss:false,routers:0};
   let cur=dev(sid);
@@ -526,7 +610,7 @@ function deliver(sid,dst,noArp){
     let ep=null,outp=null;
     for(const p of ports){const eps=l2Reach(cur.id,p);ep=eps.find(e=>ownsIpAt(dev(e.dev),e.port,r.next));if(ep){outp=p;break}}
     if(!ep){R.kind=cur.id===sid?'arp-local':'arp';R.where=cur.id;R.err='tidak ada balasan ARP dari '+r.next;return R}
-    const myIp=cur.type==='router'?cur.ifaces[outp].ip:ipAt(cur,outp);
+    const myIp=cur.type==='router'?ifObj(cur,outp).ip:ipAt(cur,outp);
     if(cur.id===sid)R.srcIp=myIp;
     const nd=dev(ep.dev);
     if(!noArp){
@@ -565,7 +649,7 @@ function pingOnce(sid,dst,noArp){
 }
 function firstIp(d){
   if(isHost(d.type))return ip2n(d.host.ip)!==null?d.host.ip:null;
-  if(d.type==='router'){for(const p of d.ports){const f=d.ifaces[p.n];if(f&&ip2n(f.ip)!==null&&!f.shut&&ifaceUp(d,p.n))return f.ip}return null}
+  if(d.type==='router'){for(const n of ifNames(d)){const f=ifObj(d,n);if(f&&ip2n(f.ip)!==null&&!f.shut&&ifUp(d,n))return f.ip}return null}
   if(d.type==='switch')return ip2n(d.svi.ip)!==null&&!d.svi.shut?d.svi.ip:null;
   return null;
 }
@@ -611,6 +695,13 @@ const str=(v,n)=>String(v==null?'':v).slice(0,n||40);
 function serialize(){return JSON.stringify({v:1,uid:S.uid,lid:S.lid,settings:S.settings,devices:S.devices,links:S.links})}
 function resetState(){S.devices=[];S.links=[];S.uid=0;S.lid=0;RT.arp={};RT.cli={};RT.term={}}
 function loadJSON(txt){let o;try{o=JSON.parse(txt)}catch(e){return{ok:false,msg:'Teks bukan JSON yang valid.'}}return loadObj(o)}
+function normAllowed(a){
+  if(!a||typeof a!=='object')return null;
+  const L=v=>Array.isArray(v)?[...new Set(v.map(n=>parseInt(n)).filter(n=>n>=1&&n<=4094))].slice(0,4094):[];
+  if(Array.isArray(a.inc))return{inc:L(a.inc)};
+  if(Array.isArray(a.exc))return{exc:L(a.exc)};
+  return null;
+}
 function loadObj(o){
   if(!o||!Array.isArray(o.devices)||!Array.isArray(o.links))return{ok:false,msg:'Format proyek tidak dikenali.'};
   if(o.devices.length>60)return{ok:false,msg:'Terlalu banyak perangkat (maksimal 60).'};
@@ -624,11 +715,21 @@ function loadObj(o){
     d.name=str(x.name,24)||x.type;d.x=clamp(+x.x||0,-4000,4000);d.y=clamp(+x.y||0,-4000,4000);d.power=x.power!==false;
     if(x.mac)d.mac=str(x.mac,16);
     if(d.host&&x.host)for(const k of['ip','mask','gw','dns'])d.host[k]=str(x.host[k],20);
-    if(x.ifaces)for(const p of d.ports){const s=x.ifaces[p.n],f=d.ifaces[p.n];if(s&&f){f.ip=str(s.ip,20);f.mask=str(s.mask,20);f.shut=!!s.shut;f.mode=s.mode==='trunk'?'trunk':'access';f.vlan=clamp(parseInt(s.vlan)||1,1,4094);f.desc=str(s.desc,60)}}
+    if(x.ifaces)for(const p of d.ports){const s=x.ifaces[p.n],f=d.ifaces[p.n];if(s&&f){f.ip=str(s.ip,20);f.mask=str(s.mask,20);f.shut=!!s.shut;f.mode=s.mode==='trunk'?'trunk':'access';f.vlan=clamp(parseInt(s.vlan)||1,1,4094);f.desc=str(s.desc,60);f.native=clamp(parseInt(s.native)||1,1,4094);f.allowed=normAllowed(s.allowed)}}
     if(d.type==='switch'){
       if(x.vlans&&typeof x.vlans==='object'){d.vlans={};for(const k of Object.keys(x.vlans)){const n=parseInt(k);if(n>=1&&n<=4094)d.vlans[n]=str(x.vlans[k],32)}if(!d.vlans[1])d.vlans[1]='default'}
       if(x.svi){d.svi.ip=str(x.svi.ip,20);d.svi.mask=str(x.svi.mask,20);d.svi.shut=!!x.svi.shut}
       d.gw=str(x.gw,20);
+    }
+    if(d.type==='router'&&x.subs&&typeof x.subs==='object'){
+      for(const k of Object.keys(x.subs).slice(0,60)){
+        const m=/^((?:FastEthernet|GigabitEthernet)\d+(?:\/\d+)*)\.(\d{1,4})$/.exec(k),sb=x.subs[k];
+        if(!m||!d.ifaces[m[1]]||!sb)continue;
+        d.subs[k]={parent:m[1],vlan:clamp(parseInt(sb.vlan)||0,0,4094),ip:str(sb.ip,20),mask:str(sb.mask,20),shut:!!sb.shut,desc:str(sb.desc,60)};
+      }
+    }
+    if(d.type==='router'&&x.rip&&typeof x.rip==='object'&&x.rip.on!==false){
+      d.rip={on:true,version:+x.rip.version===1?1:2,networks:(Array.isArray(x.rip.networks)?x.rip.networks:[]).slice(0,20).map(v=>str(v,20)).filter(v=>ip2n(v)!==null),passive:(Array.isArray(x.rip.passive)?x.rip.passive:[]).slice(0,40).map(v=>str(v,40)),autoSum:x.rip.autoSum!==false};
     }
     if(d.type==='router'&&Array.isArray(x.routes))d.routes=x.routes.slice(0,40).map(r=>({net:str(r.net,20),mask:str(r.mask,20),via:str(r.via,20)}));
     if(d.type==='server'&&x.http){d.http={on:x.http.on!==false,page:str(x.http.page,600)}}
@@ -656,13 +757,19 @@ function resolveIf(d,txt){
   const t=String(txt).toLowerCase().replace(/\s+/g,'');
   let m=/^vlan(\d+)$/.exec(t);
   if(m)return d.type==='switch'&&+m[1]===1?{svi:true}:null;
-  m=/^(fastethernet|fa|f|gigabitethernet|gi|g)(\d+(?:\/\d+)*)$/.exec(t);
+  m=/^(fastethernet|fa|f|gigabitethernet|gi|g)(\d+(?:\/\d+)*)(?:\.(\d{1,4}))?$/.exec(t);
   if(!m)return null;
   const full=(m[1][0]==='f'?'FastEthernet':'GigabitEthernet')+m[2];
   const p=d.ports.find(p=>p.n===full&&d.ifaces[p.n]);
-  return p?{port:p.n}:null;
+  if(!p)return null;
+  if(m[3]!==undefined){
+    const num=parseInt(m[3]);if(d.type!=='router'||!(num>=1&&num<=4094))return null;
+    return{port:full+'.'+num,sub:true,parent:full};
+  }
+  return{port:p.n};
 }
 function ifStatus(d,pn){
+  if(isSub(d,pn)){const sb=d.subs[pn];if(sb.shut||d.ifaces[sb.parent].shut)return'administratively down';return ifUp(d,pn)?'up':'down'}
   if(pn==='Vlan1')return d.svi.shut?'administratively down':(d.vlans[1]&&d.ports.some(p=>d.ifaces[p.n]&&ifaceUp(d,p.n)&&(d.ifaces[p.n].mode==='trunk'||d.ifaces[p.n].vlan===1))?'up':'down');
   const f=d.ifaces[pn];if(f.shut)return'administratively down';
   return ifaceUp(d,pn)?'up':'down';
@@ -697,18 +804,18 @@ function matchCmd(table,toks){
 }
 function iosPrompt(d){
   const st=cliOf(d);
-  return d.name+({user:'>',priv:'#',config:'(config)#',if:st.range?'(config-if-range)#':'(config-if)#',vlan:'(config-vlan)#',line:'(config-line)#'}[st.mode]);
+  return d.name+({user:'>',priv:'#',config:'(config)#',if:st.range?'(config-if-range)#':(st.sub?'(config-subif)#':'(config-if)#'),vlan:'(config-vlan)#',line:'(config-line)#',rip:'(config-router)#'}[st.mode]);
 }
 const BADIN="% Invalid input detected at '^' marker.";
 /* handlers: (d,st,a,X) */
 const c_enable=(d,st)=>{st.mode='priv'};
 const c_disable=(d,st)=>{st.mode='user'};
 function c_exit(d,st,a,X){
-  const up={if:'config',vlan:'config',line:'config',config:'priv',priv:'user'};
+  const up={if:'config',vlan:'config',line:'config',rip:'config',config:'priv',priv:'user'};
   if(st.mode==='user'){X.out.push('(sudah di mode paling awal)');return}
   st.mode=up[st.mode];
 }
-function c_end(d,st){if(['config','if','vlan','line'].includes(st.mode))st.mode='priv'}
+function c_end(d,st){if(['config','if','vlan','line','rip'].includes(st.mode))st.mode='priv'}
 function c_conf(d,st,a,X){st.mode='config';X.out.push('Enter configuration commands, one per line.  End with CNTL/Z.')}
 function c_write(d,st,a,X){X.out.push('Building configuration...','[OK]')}
 function c_reload(d,st,a,X){X.out.push('Reload simulasi: konfigurasi yang belum disimpan tetap dipertahankan di simulator ini.')}
@@ -717,8 +824,69 @@ function c_do(d,st,a,X){const t=tableFor(d,Object.assign({},st,{mode:'priv'}));c
 function c_interface(d,st,a,X){
   const r=resolveIf(d,a[0]);
   if(!r){X.out.push('% Invalid interface. Contoh: interface fa0/1, interface gi0/0'+(d.type==='switch'?', interface vlan 1':''));return}
-  st.mode='if';st.range=false;st.ctx=[r.svi?'Vlan1':r.port];
+  if(r.sub&&!d.subs[r.port])d.subs[r.port]={parent:r.parent,vlan:0,ip:'',mask:'',shut:false,desc:''};
+  st.mode='if';st.range=false;st.sub=!!r.sub;st.ctx=[r.svi?'Vlan1':r.port];
 }
+function c_nointerface(d,st,a,X){
+  const r=resolveIf(d,a[0]);
+  if(!r||!r.sub||!d.subs[r.port]){X.out.push('% Hanya subinterface yang dapat dihapus, contoh: no interface gi0/0.10');return}
+  delete d.subs[r.port];
+}
+function c_encap(d,st,a,X){
+  const pn=st.ctx[0],sb=d.subs&&d.subs[pn];
+  if(!sb){X.out.push('% encapsulation hanya untuk subinterface, misalnya interface gi0/0.10');return}
+  const n=parseInt(a[0]);if(!(n>=1&&n<=4094)){X.out.push(BADIN);return}
+  for(const k of Object.keys(d.subs))if(k!==pn&&d.subs[k].parent===sb.parent&&d.subs[k].vlan===n){X.out.push('% Encapsulation VLAN '+n+' sudah dipakai oleh '+k);return}
+  sb.vlan=n;
+}
+/* ---- RIP ---- */
+function c_router_rip(d,st){if(!d.rip)d.rip={on:true,version:2,networks:[],passive:[],autoSum:true};d.rip.on=true;st.mode='rip';st.ctx=null}
+function c_norip(d){d.rip=null}
+function c_rip_version(d,st,a,X){const v=parseInt(a[0]);if(v!==1&&v!==2){X.out.push(BADIN);return}d.rip.version=v}
+function c_rip_network(d,st,a,X,del){
+  if(ip2n(a[0])===null){X.out.push(BADIN);return}
+  const n=classfulNet(a[0]),i=d.rip.networks.indexOf(n);
+  if(del){if(i>=0)d.rip.networks.splice(i,1);return}
+  if(i<0)d.rip.networks.push(n);
+}
+function c_rip_passive(d,st,a,X,del){
+  const r=resolveIf(d,a[0]);
+  if(!r||r.svi||(!d.ifaces[r.port]&&!(d.subs&&d.subs[r.port]))){X.out.push(BADIN);return}
+  const i=d.rip.passive.indexOf(r.port);
+  if(del){if(i>=0)d.rip.passive.splice(i,1)}else if(i<0)d.rip.passive.push(r.port);
+}
+function c_rip_autosum(d,st,a,X,on){d.rip.autoSum=on}
+/* ---- trunk ---- */
+function parseVlanList(s){
+  const set=new Set();
+  for(const part of String(s).split(',')){
+    const m=/^(\d+)(?:-(\d+))?$/.exec(part.trim());if(!m)return null;
+    const lo=+m[1],hi=m[2]?+m[2]:lo;if(lo<1||hi>4094||lo>hi)return null;
+    for(let i=lo;i<=hi;i++)set.add(i);
+  }
+  return[...set];
+}
+function c_trunk_allowed(d,st,a,X){
+  const w=String(a[0]).trim().split(/\s+/),k=w[0].toLowerCase();
+  let mode='set',txt=w.join('');
+  if(k==='all'){for(const pn of st.ctx)if(d.ifaces[pn])d.ifaces[pn].allowed=null;return}
+  if(k==='none'){for(const pn of st.ctx)if(d.ifaces[pn])d.ifaces[pn].allowed={inc:[]};return}
+  if(k==='add'||k==='remove'||k==='except'){mode=k;txt=w.slice(1).join('')}
+  const L=parseVlanList(txt);if(!L){X.out.push(BADIN);return}
+  for(const pn of st.ctx){
+    const f=d.ifaces[pn];if(!f)continue;const A=f.allowed;
+    if(mode==='set')f.allowed={inc:L};
+    else if(mode==='except')f.allowed={exc:L};
+    else if(mode==='add'){if(!A)continue;if(A.inc)f.allowed={inc:[...new Set(A.inc.concat(L))]};else f.allowed={exc:A.exc.filter(v=>!L.includes(v))};if(f.allowed.exc&&!f.allowed.exc.length)f.allowed=null}
+    else if(mode==='remove'){if(!A)f.allowed={exc:L};else if(A.inc)f.allowed={inc:A.inc.filter(v=>!L.includes(v))};else f.allowed={exc:[...new Set(A.exc.concat(L))]}}
+  }
+}
+function c_trunk_native(d,st,a,X){
+  const n=parseInt(a[0]);if(!(n>=1&&n<=4094)){X.out.push(BADIN);return}
+  for(const pn of st.ctx)if(d.ifaces[pn])d.ifaces[pn].native=n;
+}
+function c_trunk_reset(d,st,a,X,what){for(const pn of st.ctx){const f=d.ifaces[pn];if(!f)continue;if(what==='allowed')f.allowed=null;else f.native=1}}
+function c_noswvlan(d,st){for(const pn of st.ctx)if(d.ifaces[pn])d.ifaces[pn].vlan=1}
 function c_range(d,st,a,X){
   const s=a[0].toLowerCase().replace(/\s+/g,'');
   const m=/^(fastethernet|fa|f|gigabitethernet|gi|g)(\d+)\/(\d+)-(?:[a-z]*\d+\/)?(\d+)$/.exec(s);
@@ -753,15 +921,16 @@ function c_ipaddr(d,st,a,X){
   for(const pn of st.ctx){
     if(pn==='Vlan1'){d.svi.ip=ip;d.svi.mask=mask;continue}
     if(d.type!=='router'){X.out.push(BADIN+' (port switch bekerja di Layer 2, beri IP lewat interface vlan 1)');return}
-    for(const p of d.ports){
-      const o=d.ifaces[p.n];if(!o||p.n===pn||ip2n(o.ip)===null||!maskOK(o.mask))continue;
+    if(isSub(d,pn)&&!d.subs[pn].vlan){X.out.push('% Configuring IP routing on a LAN subinterface is only allowed if that subinterface is already configured as part of an IEEE 802.10, IEEE 802.1Q, or ISL vLAN.','  (isi dulu: encapsulation dot1q <nomor-vlan>)');return}
+    for(const n of ifNames(d)){
+      const o=ifObj(d,n);if(!o||n===pn||ip2n(o.ip)===null||!maskOK(o.mask))continue;
       const k=maskFromCidr(Math.min(cidr(o.mask),cidr(mask)));
-      if(sameNet(o.ip,ip,k)){X.out.push('% '+netOf(ip,mask)+' overlaps with '+p.n);return}
+      if(sameNet(o.ip,ip,k)){X.out.push('% '+netOf(ip,mask)+' overlaps with '+n);return}
     }
-    d.ifaces[pn].ip=ip;d.ifaces[pn].mask=mask;
+    const f=ifObj(d,pn);f.ip=ip;f.mask=mask;
   }
 }
-function c_noipaddr(d,st){for(const pn of st.ctx){if(pn==='Vlan1'){d.svi.ip='';d.svi.mask=''}else if(d.type==='router'){d.ifaces[pn].ip='';d.ifaces[pn].mask=''}}}
+function c_noipaddr(d,st){for(const pn of st.ctx){if(pn==='Vlan1'){d.svi.ip='';d.svi.mask=''}else if(d.type==='router'){const f=ifObj(d,pn);f.ip='';f.mask=''}}}
 function c_shut(d,st,a,X,on){
   for(const pn of st.ctx){
     const full=pn==='Vlan1'?'Vlan1':pn;
@@ -771,12 +940,12 @@ function c_shut(d,st,a,X,on){
       if(!on&&!was)X.out.push('%LINK-5-CHANGED: Interface Vlan1, changed state to administratively down');
       continue;
     }
-    const f=d.ifaces[pn],was=f.shut;f.shut=!on;
+    const f=ifObj(d,pn),was=f.shut;f.shut=!on;
     if(!on&&!was)X.out.push('%LINK-5-CHANGED: Interface '+full+', changed state to administratively down','%LINEPROTO-5-UPDOWN: Line protocol on Interface '+full+', changed state to down');
-    if(on&&was&&ifaceUp(d,pn))X.out.push('%LINK-5-CHANGED: Interface '+full+', changed state to up','%LINEPROTO-5-UPDOWN: Line protocol on Interface '+full+', changed state to up');
+    if(on&&was&&ifUp(d,pn))X.out.push('%LINK-5-CHANGED: Interface '+full+', changed state to up','%LINEPROTO-5-UPDOWN: Line protocol on Interface '+full+', changed state to up');
   }
 }
-function c_desc(d,st,a){for(const pn of st.ctx)if(d.ifaces[pn])d.ifaces[pn].desc=str(a[0],60)}
+function c_desc(d,st,a){for(const pn of st.ctx){const f=ifObj(d,pn);if(f)f.desc=str(a[0],60)}}
 function c_swmode(d,st,a,X){
   const m=a[0].toLowerCase();
   if(!(m==='access'||m==='trunk'||'access'.startsWith(m)||'trunk'.startsWith(m))){X.out.push(BADIN);return}
@@ -806,13 +975,25 @@ function showRun(d,st,a,X){
     o.push('interface '+p.n);
     if(f.desc)o.push(' description '+f.desc);
     if(d.type==='switch'){
-      if(f.mode==='trunk')o.push(' switchport mode trunk');
-      else{if(f.vlan!==1)o.push(' switchport access vlan '+f.vlan);o.push(' switchport mode access')}
+      if(f.mode==='trunk'){
+        o.push(' switchport mode trunk');
+        if((f.native||1)!==1)o.push(' switchport trunk native vlan '+f.native);
+        if(f.allowed)o.push(' switchport trunk allowed vlan '+allowedText(f));
+      }else{if(f.vlan!==1)o.push(' switchport access vlan '+f.vlan);o.push(' switchport mode access')}
     }else{
       if(ip2n(f.ip)!==null&&maskOK(f.mask))o.push(' ip address '+f.ip+' '+f.mask);else o.push(' no ip address');
       o.push(' duplex auto',' speed auto');
     }
     if(f.shut)o.push(' shutdown');
+    o.push('!');
+  }
+  if(d.type==='router')for(const sn of Object.keys(d.subs||{}).sort()){
+    const sb=d.subs[sn];
+    o.push('interface '+sn);
+    if(sb.desc)o.push(' description '+sb.desc);
+    o.push(sb.vlan?' encapsulation dot1Q '+sb.vlan:' no encapsulation');
+    if(ip2n(sb.ip)!==null&&maskOK(sb.mask))o.push(' ip address '+sb.ip+' '+sb.mask);else o.push(' no ip address');
+    if(sb.shut)o.push(' shutdown');
     o.push('!');
   }
   if(d.type==='switch'){
@@ -822,45 +1003,67 @@ function showRun(d,st,a,X){
     o.push('!');
     if(ip2n(d.gw)!==null)o.push('ip default-gateway '+d.gw,'!');
   }
+  if(d.type==='router'&&d.rip){
+    o.push('router rip',' version '+d.rip.version);
+    for(const pn of d.rip.passive)o.push(' passive-interface '+pn);
+    for(const n of d.rip.networks)o.push(' network '+n);
+    if(d.rip.autoSum===false&&d.rip.version===2)o.push(' no auto-summary');
+    o.push('!');
+  }
   if(d.type==='router'){for(const r of d.routes)o.push('ip route '+r.net+' '+r.mask+' '+r.via);if(d.routes.length)o.push('!')}
   o.push('end');X.out.push(...o);
 }
 function showIpBrief(d,st,a,X){
   X.out.push('Interface              IP-Address      OK? Method Status                Protocol');
-  const rows=d.ports.filter(p=>d.ifaces[p.n]).map(p=>p.n);
+  const rows=ifNames(d);
   if(d.type==='switch')rows.push('Vlan1');
   for(const pn of rows){
-    const ip=pn==='Vlan1'?d.svi.ip:d.ifaces[pn].ip;
+    const ip=pn==='Vlan1'?d.svi.ip:ifObj(d,pn).ip;
     const stt=ifStatus(d,pn);
     X.out.push(IFPAD(pn,23)+IFPAD(ip2n(ip)!==null?ip:'unassigned',16)+'YES '+IFPAD(ip2n(ip)!==null?'manual':'unset',7)+IFPAD(stt,22)+' '+(stt==='up'?'up':'down'));
   }
 }
 function showRoute(d,st,a,X){
-  const o=['Codes: C - connected, S - static','',''];
+  const o=['Codes: C - connected, S - static, R - RIP','',''];
   const def=d.routes.find(r=>r.net==='0.0.0.0'&&r.mask==='0.0.0.0');
   o[2]=def?'Gateway of last resort is '+def.via+' to network 0.0.0.0':'Gateway of last resort is not set';
   o.push('');
-  for(const p of d.ports){
-    const f=d.ifaces[p.n];
-    if(!f||ip2n(f.ip)===null||!maskOK(f.mask)||f.shut||!ifaceUp(d,p.n))continue;
-    o.push('C    '+netOf(f.ip,f.mask)+'/'+cidr(f.mask)+' is directly connected, '+p.n);
+  for(const n of ifNames(d)){
+    const f=ifObj(d,n);
+    if(!f||ip2n(f.ip)===null||!maskOK(f.mask)||f.shut||!ifUp(d,n))continue;
+    o.push('C    '+netOf(f.ip,f.mask)+'/'+cidr(f.mask)+' is directly connected, '+n);
   }
   for(const r of d.routes)o.push('S    '+r.net+'/'+cidr(r.mask)+' [1/0] via '+r.via);
+  for(const r of ripRoutesFor(d).sort((x,y)=>ip2n(x.net)-ip2n(y.net)))o.push('R    '+r.net+'/'+cidr(r.mask)+' [120/'+r.metric+'] via '+r.via+', 00:00:'+String(10+r.metric*7).padStart(2,'0')+', '+r.ifn);
+  X.out.push(...o);
+}
+function showProtocols(d,st,a,X){
+  if(!d.rip||!d.rip.on){X.out.push('*** IP Routing is NSF aware ***','','Tidak ada protokol routing dinamis yang aktif. Gunakan: router rip');return}
+  const R=d.rip,rt=ripRoutesFor(d);
+  const o=['Routing Protocol is "rip"','  Outgoing update filter list for all interfaces is not set','  Incoming update filter list for all interfaces is not set','  Sending updates every 30 seconds, next due in 12 seconds','  Invalid after 180 seconds, hold down 180, flushed after 240','  Redistributing: rip','  Default version control: send version '+R.version+', receive version '+R.version,'    Interface             Send  Recv  Triggered RIP  Key-chain'];
+  for(const n of ifNames(d)){const f=ifObj(d,n);if(f&&ip2n(f.ip)!==null&&!f.shut&&R.networks.some(x=>classfulNet(f.ip)===classfulNet(x))&&!R.passive.includes(n))o.push('    '+IFPAD(n,22)+IFPAD(R.version,6)+IFPAD(R.version,6))}
+  o.push('  Automatic network summarization is '+((R.autoSum!==false||R.version===1)?'in effect':'not in effect'),'  Maximum path: 4','  Routing for Networks:');
+  for(const n of R.networks)o.push('    '+n);
+  if(R.passive.length){o.push('  Passive Interface(s):');for(const n of R.passive)o.push('    '+n)}
+  o.push('  Routing Information Sources:','    Gateway         Distance      Last Update');
+  for(const g of [...new Set(rt.map(r=>r.via))])o.push('    '+IFPAD(g,16)+IFPAD(120,14)+'00:00:12');
+  o.push('  Distance: (default is 120)');
   X.out.push(...o);
 }
 function showIfs(d,st,a,X){
-  const list=a&&a[0]?(()=>{const r=resolveIf(d,a[0]);return r?[r.svi?'Vlan1':r.port]:null})():d.ports.filter(p=>d.ifaces[p.n]).map(p=>p.n);
+  const list=a&&a[0]?(()=>{const r=resolveIf(d,a[0]);return r&&(r.svi||ifObj(d,r.port))?[r.svi?'Vlan1':r.port]:null})():ifNames(d);
   if(!list){X.out.push('% Invalid interface.');return}
   for(const pn of list){
     const stt=ifStatus(d,pn);
     X.out.push(pn+' is '+stt+', line protocol is '+(stt==='up'?'up':'down'));
     X.out.push('  Hardware is '+(pn==='Vlan1'?'EtherSVI':(pn.startsWith('Gig')?'Gigabit Ethernet':'Fast Ethernet'))+', address is '+d.mac.toLowerCase());
-    const ip=pn==='Vlan1'?d.svi:d.ifaces[pn];
+    const ip=pn==='Vlan1'?d.svi:ifObj(d,pn);
     if(ip2n(ip.ip)!==null&&maskOK(ip.mask))X.out.push('  Internet address is '+ip.ip+'/'+cidr(ip.mask));
+    if(isSub(d,pn)){X.out.push('  Encapsulation '+(ip.vlan?'802.1Q Virtual LAN, Vlan ID  '+ip.vlan:'belum diatur (encapsulation dot1q <vlan>)'));continue}
     if(pn!=='Vlan1'){
       const l=linksAt(d.id,pn)[0];
       X.out.push('  MTU 1500 bytes, BW '+(pn.startsWith('Gig')?'1000000':'100000')+' Kbit'+(l?', cable: '+CABLES[l.cable].label:', tidak ada kabel'));
-      if(d.type==='switch')X.out.push('  Port mode: '+d.ifaces[pn].mode+(d.ifaces[pn].mode==='access'?', VLAN '+d.ifaces[pn].vlan:''));
+      if(d.type==='switch')X.out.push('  Port mode: '+d.ifaces[pn].mode+(d.ifaces[pn].mode==='access'?', VLAN '+d.ifaces[pn].vlan:', native VLAN '+(d.ifaces[pn].native||1)+', allowed '+allowedText(d.ifaces[pn])));
     }
   }
 }
@@ -870,6 +1073,17 @@ function showVlan(d,st,a,X){
     const ports=d.ports.filter(p=>{const f=d.ifaces[p.n];return f&&f.mode==='access'&&f.vlan===k}).map(p=>short(p.n).replace('Fa','Fa').replace('Gi','Gi'));
     X.out.push(IFPAD(k,5)+IFPAD(d.vlans[k],33)+IFPAD('active',10)+ports.join(', '));
   }
+}
+function showTrunk(d,st,a,X){
+  const tp=d.ports.filter(p=>d.ifaces[p.n]&&d.ifaces[p.n].mode==='trunk');
+  if(!tp.length){X.out.push('(tidak ada port trunk)');return}
+  const act=f=>Object.keys(d.vlans).map(Number).filter(v=>vlanOK(f,v));
+  X.out.push('Port        Mode         Encapsulation  Status        Native vlan');
+  for(const p of tp){const f=d.ifaces[p.n];X.out.push(IFPAD(short(p.n),12)+IFPAD('on',13)+IFPAD('802.1q',15)+IFPAD(ifaceUp(d,p.n)?'trunking':'not-trunking',14)+(f.native||1))}
+  X.out.push('','Port        Vlans allowed on trunk');
+  for(const p of tp)X.out.push(IFPAD(short(p.n),12)+allowedText(d.ifaces[p.n]));
+  X.out.push('','Port        Vlans allowed and active in management domain');
+  for(const p of tp)X.out.push(IFPAD(short(p.n),12)+vlanRange(act(d.ifaces[p.n])));
 }
 function showMac(d,st,a,X){
   X.out.push('          Mac Address Table','-------------------------------------------','','Vlan    Mac Address       Type        Ports','----    -----------       --------    -----');
@@ -905,7 +1119,7 @@ function showVer(d,st,a,X){
 const SHOWS=[
   ['show running-config',showRun],['show startup-config',showRun],
   ['show ip interface brief',showIpBrief],['show ip route',showRoute,'router'],
-  ['show interfaces',showIfs],['show interfaces <...>',showIfs],
+  ['show interfaces trunk',showTrunk,'switch'],['show interfaces',showIfs],['show interfaces <...>',showIfs],['show ip protocols',showProtocols,'router'],
   ['show vlan brief',showVlan,'switch'],['show vlan',showVlan,'switch'],
   ['show mac address-table',showMac,'switch'],['show arp',showArp],['show cdp neighbors',showCdp],['show version',showVer]
 ];
@@ -918,6 +1132,7 @@ function tableFor(d,st){
     case 'config':T=[
       ['hostname <n>',c_hostname],['interface range <...>',c_range,'switch'],['interface <...>',c_interface],
       ['vlan <n>',c_vlan,'switch'],['no vlan <n>',c_novlan,'switch'],
+      ['router rip',c_router_rip,'router'],['no router rip',c_norip,'router'],['no interface <...>',c_nointerface,'router'],
       ['ip route <a> <b> <c>',(d,s,a,X)=>c_route(d,s,a,X,false),'router'],['no ip route <a> <b> <c>',(d,s,a,X)=>c_route(d,s,a,X,true),'router'],
       ['ip default-gateway <ip>',c_gw,'switch'],['ip routing',c_noop],['ip domain-name <...>',c_noop],['no ip domain-lookup',c_noop],
       ['enable secret <...>',c_noop],['enable password <...>',c_noop],['service password-encryption',c_noop],['banner motd <...>',c_noop],
@@ -926,8 +1141,14 @@ function tableFor(d,st){
       ['do <...>',c_do],['exit',c_exit],['end',c_end]];break;
     case 'if':T=[
       ['ip address <ip> <mask>',c_ipaddr],['no ip address',c_noipaddr],['shutdown',(d,s,a,X)=>c_shut(d,s,a,X,false)],['no shutdown',(d,s,a,X)=>c_shut(d,s,a,X,true)],
-      ['description <...>',c_desc],['switchport mode <m>',c_swmode,'switch'],['switchport access vlan <n>',c_swvlan,'switch'],['switchport trunk <...>',c_noop,'switch'],
+      ['description <...>',c_desc],['switchport mode <m>',c_swmode,'switch'],['switchport access vlan <n>',c_swvlan,'switch'],['switchport trunk allowed vlan <...>',c_trunk_allowed,'switch'],['switchport trunk native vlan <n>',c_trunk_native,'switch'],['switchport trunk encapsulation <x>',c_noop,'switch'],['switchport nonegotiate',c_noop,'switch'],
+      ['no switchport trunk allowed vlan',(d,s,a,X)=>c_trunk_reset(d,s,a,X,'allowed'),'switch'],['no switchport trunk native vlan',(d,s,a,X)=>c_trunk_reset(d,s,a,X,'native'),'switch'],['no switchport access vlan',c_noswvlan,'switch'],
+      ['encapsulation dot1q <n>',c_encap,'router'],
       ['duplex <x>',c_noop],['speed <x>',c_noop],['do <...>',c_do],['exit',c_exit],['end',c_end]];break;
+    case 'rip':T=[['version <n>',c_rip_version],['network <ip>',(d,s,a,X)=>c_rip_network(d,s,a,X,false)],['no network <ip>',(d,s,a,X)=>c_rip_network(d,s,a,X,true)],
+      ['passive-interface <i>',(d,s,a,X)=>c_rip_passive(d,s,a,X,false)],['no passive-interface <i>',(d,s,a,X)=>c_rip_passive(d,s,a,X,true)],
+      ['auto-summary',(d,s,a,X)=>c_rip_autosum(d,s,a,X,true)],['no auto-summary',(d,s,a,X)=>c_rip_autosum(d,s,a,X,false)],['default-information originate',c_noop],['redistribute <...>',c_noop],
+      ['do <...>',c_do],['exit',c_exit],['end',c_end]];break;
     case 'vlan':T=[['name <n>',c_vname],['do <...>',c_do],['exit',c_exit],['end',c_end]];break;
     default:T=[['password <...>',c_noop],['login',c_noop],['exec-timeout <a> <b>',c_noop],['logging synchronous',c_noop],['do <...>',c_do],['exit',c_exit],['end',c_end]];
   }
@@ -945,7 +1166,7 @@ function iosExec(d,raw){
     return X;
   }
   let m=matchCmd(table,toks);
-  if((!m||m.incomplete)&&['if','vlan','line'].includes(st.mode)){
+  if((!m||m.incomplete)&&['if','vlan','line','rip'].includes(st.mode)){
     /* IOS: perintah global boleh diketik langsung dari sub-mode */
     const g=matchCmd(tableFor(d,Object.assign({},st,{mode:'config'})),toks);
     if(g&&!g.incomplete){st.mode='config';m=g}
@@ -1386,14 +1607,31 @@ function modCfg(d){
     for(const p of d.ports){const f=d.ifaces[p.n];if(!f)continue;
       h+='<tr><td class="mono">'+esc(short(p.n))+'</td><td><input type="checkbox" data-a="if" data-p="'+esc(p.n)+'" data-k="up" '+(f.shut?'':'checked')+' aria-label="Aktifkan '+esc(p.n)+'"></td><td>'+inp('if','ip',f.ip,'data-p="'+esc(p.n)+'" style="min-width:110px"')+'</td><td>'+inp('if','mask',f.mask,'data-p="'+esc(p.n)+'" style="min-width:110px"')+'</td><td><span class="pill '+(ifStatus(d,p.n)==='up'?'good':'bad')+'">'+ifStatus(d,p.n)+'</span></td></tr>'}
     h+='</table></div><p class="small muted">Interface router mati secara bawaan. Centang Aktif sama dengan perintah <span class="mono">no shutdown</span>.</p></div>';
+    h+='<div class="card"><h3>Subinterface (router-on-a-stick)</h3>';
+    const sk=Object.keys(d.subs||{});
+    if(sk.length){h+='<div style="overflow-x:auto"><table class="t"><tr><th>Subinterface</th><th>Aktif</th><th>VLAN (dot1q)</th><th>IP address</th><th>Subnet mask</th><th>Status</th><th></th></tr>';
+      for(const k of sk){const f=d.subs[k];
+        h+='<tr><td class="mono">'+esc(short(k))+'</td><td><input type="checkbox" data-a="sub" data-p="'+esc(k)+'" data-k="up" '+(f.shut?'':'checked')+' aria-label="Aktifkan '+esc(k)+'"></td><td class="mono">'+f.vlan+'</td><td>'+inp('sub','ip',f.ip,'data-p="'+esc(k)+'" style="min-width:110px"')+'</td><td>'+inp('sub','mask',f.mask,'data-p="'+esc(k)+'" style="min-width:110px"')+'</td><td><span class="pill '+(ifUp(d,k)?'good':'bad')+'">'+(ifUp(d,k)?'up':'down')+'</span></td><td><button class="btn sm bad" data-m="subdel" data-p="'+esc(k)+'">Hapus</button></td></tr>'}
+      h+='</table></div>'}
+    h+='<div class="g3" style="margin-top:8px"><select id="sb-p" aria-label="Interface induk">'+d.ports.map(p=>'<option value="'+esc(p.n)+'">'+esc(short(p.n))+'</option>').join('')+'</select><input type="number" id="sb-v" min="1" max="4094" placeholder="VLAN, mis. 10"><button class="btn sm pri" data-m="subadd">Tambah subinterface</button></div><p class="small muted">Sama dengan <span class="mono">interface gi0/0.10</span> lalu <span class="mono">encapsulation dot1q 10</span>. Interface induk harus aktif dan tersambung ke port trunk switch. IP gateway tiap VLAN diisi di subinterface.</p></div>';
+    {const R=d.rip,pas=(R&&R.passive||[]);
+    h+='<div class="card"><h3>Routing dinamis RIP</h3><label class="row"><input type="checkbox" data-a="rip" data-k="on" '+(R&&R.on?'checked':'')+'> Aktifkan RIP (<span class="mono">router rip</span>)</label>';
+    if(R&&R.on){
+      h+='<div class="g2" style="margin-top:8px">'+fld('Versi','<select data-a="rip" data-k="version"><option value="1" '+(R.version===1?'selected':'')+'>1</option><option value="2" '+(R.version===2?'selected':'')+'>2</option></select>')+fld('Network (pisahkan koma)','<input type="text" data-a="rip" data-k="networks" value="'+esc(R.networks.join(', '))+'" placeholder="10.0.0.0, 192.168.1.0">')+'</div>';
+      h+='<label class="row" style="margin-top:6px"><input type="checkbox" data-a="rip" data-k="autosum" '+(R.autoSum===false?'':'checked')+'> Auto-summary (nonaktifkan dengan <span class="mono">no auto-summary</span>, hanya berlaku versi 2)</label>';
+      h+='<h4 style="margin:10px 0 4px;font-size:13px">Passive-interface</h4><div class="row" style="flex-wrap:wrap;gap:10px">'+ifNames(d).map(n=>'<label class="row small"><input type="checkbox" data-a="rip" data-k="passive" data-p="'+esc(n)+'" '+(pas.includes(n)?'checked':'')+'> '+esc(short(n))+'</label>').join('')+'</div>';
+      const rr=ripRoutesFor(d);
+      h+='<h4 style="margin:10px 0 4px;font-size:13px">Rute hasil RIP</h4>'+(rr.length?'<table class="t"><tr><th>Tujuan</th><th>Mask</th><th>Metrik</th><th>Via</th></tr>'+rr.map(r=>'<tr><td class="mono">'+esc(r.net)+'</td><td class="mono">'+esc(r.mask)+'</td><td>'+r.metric+'</td><td class="mono">'+esc(r.via)+'</td></tr>').join('')+'</table>':'<p class="small muted">Belum ada rute yang dipelajari. Periksa network, versi, kabel, dan interface tetangga.</p>');
+    }else h+='<p class="small muted">RIP membuat router saling bertukar rute. Rute statis tetap diutamakan (AD 1) dibanding RIP (AD 120).</p>';
+    h+='</div>'}
     h+='<div class="card"><h3>Rute statis</h3><table class="t"><tr><th>Jaringan tujuan</th><th>Mask</th><th>Next-hop</th><th></th></tr>'+d.routes.map((r,i)=>'<tr><td class="mono">'+esc(r.net)+'</td><td class="mono">'+esc(r.mask)+'</td><td class="mono">'+esc(r.via)+'</td><td><button class="btn sm bad" data-m="routedel" data-i="'+i+'">Hapus</button></td></tr>').join('')+'</table><div class="g3" style="margin-top:8px"><input type="text" id="rt-n" placeholder="10.2.2.0"><input type="text" id="rt-m" placeholder="255.255.255.0"><input type="text" id="rt-v" placeholder="172.16.0.2"></div><div class="row" style="margin-top:6px"><button class="btn sm pri" data-m="routeadd">Tambah rute</button><span class="small muted">Rute default: 0.0.0.0 / 0.0.0.0</span></div></div>';
   }
   if(d.type==='switch'){
     h+='<div class="card"><h3>VLAN</h3><table class="t"><tr><th>ID</th><th>Nama</th><th></th></tr>'+Object.keys(d.vlans).map(Number).sort((a,b)=>a-b).map(k=>'<tr><td>'+k+'</td><td>'+esc(d.vlans[k])+'</td><td>'+(k===1?'':'<button class="btn sm bad" data-m="vlandel" data-n="'+k+'">Hapus</button>')+'</td></tr>').join('')+'</table><div class="g3" style="margin-top:8px"><input type="number" id="vl-n" min="2" max="4094" placeholder="ID, mis. 10"><input type="text" id="vl-m" placeholder="Nama, mis. GURU" maxlength="32"><button class="btn sm pri" data-m="vlanadd">Tambah VLAN</button></div></div>';
-    h+='<div class="card"><h3>Port</h3><div style="overflow-x:auto"><table class="t"><tr><th>Port</th><th>Aktif</th><th>Mode</th><th>VLAN</th><th>Status</th></tr>';
+    h+='<div class="card"><h3>Port</h3><div style="overflow-x:auto"><table class="t"><tr><th>Port</th><th>Aktif</th><th>Mode</th><th>VLAN</th><th>Trunk: native</th><th>Trunk: allowed</th><th>Status</th></tr>';
     for(const p of d.ports){const f=d.ifaces[p.n];if(!f)continue;
-      h+='<tr><td class="mono">'+esc(short(p.n))+'</td><td><input type="checkbox" data-a="if" data-p="'+esc(p.n)+'" data-k="up" '+(f.shut?'':'checked')+' aria-label="Aktifkan '+esc(p.n)+'"></td><td><select data-a="if" data-p="'+esc(p.n)+'" data-k="mode"><option value="access" '+(f.mode==='access'?'selected':'')+'>access</option><option value="trunk" '+(f.mode==='trunk'?'selected':'')+'>trunk</option></select></td><td><input type="number" min="1" max="4094" style="width:78px" data-a="if" data-p="'+esc(p.n)+'" data-k="vlan" value="'+f.vlan+'" '+(f.mode==='trunk'?'disabled':'')+'></td><td><span class="pill '+(ifStatus(d,p.n)==='up'?'good':'')+'">'+ifStatus(d,p.n)+'</span></td></tr>'}
-    h+='</table></div><p class="small muted">Port access hanya membawa satu VLAN. Port trunk membawa semua VLAN antar-switch. VLAN yang belum ada dibuat otomatis.</p></div>';
+      h+='<tr><td class="mono">'+esc(short(p.n))+'</td><td><input type="checkbox" data-a="if" data-p="'+esc(p.n)+'" data-k="up" '+(f.shut?'':'checked')+' aria-label="Aktifkan '+esc(p.n)+'"></td><td><select data-a="if" data-p="'+esc(p.n)+'" data-k="mode"><option value="access" '+(f.mode==='access'?'selected':'')+'>access</option><option value="trunk" '+(f.mode==='trunk'?'selected':'')+'>trunk</option></select></td><td><input type="number" min="1" max="4094" style="width:78px" data-a="if" data-p="'+esc(p.n)+'" data-k="vlan" value="'+f.vlan+'" '+(f.mode==='trunk'?'disabled':'')+'></td><td><input type="number" min="1" max="4094" style="width:70px" data-a="if" data-p="'+esc(p.n)+'" data-k="native" value="'+(f.native||1)+'" '+(f.mode==='trunk'?'':'disabled')+' aria-label="Native VLAN '+esc(p.n)+'"></td><td><input type="text" style="width:100px" data-a="if" data-p="'+esc(p.n)+'" data-k="allowed" value="'+esc(f.allowed?allowedText(f):'all')+'" placeholder="all" '+(f.mode==='trunk'?'':'disabled')+' aria-label="Allowed VLAN '+esc(p.n)+'"></td><td><span class="pill '+(ifStatus(d,p.n)==='up'?'good':'')+'">'+ifStatus(d,p.n)+'</span></td></tr>'}
+    h+='</table></div><p class="small muted">Port access hanya membawa satu VLAN. Port trunk membawa banyak VLAN antar-switch atau ke router. Native VLAN lewat tanpa tag (harus sama di kedua ujung). Allowed VLAN: isi mis. 10,20,30-40 atau all. VLAN yang belum ada dibuat otomatis.</p></div>';
     h+='<div class="card"><h3>Manajemen (interface VLAN 1)</h3><div class="g2">'+fld('IP address',inp('svi','ip',d.svi.ip))+fld('Subnet mask',inp('svi','mask',d.svi.mask))+fld('Default gateway',inp('gw','gw',d.gw))+'</div><label class="row" style="margin-top:6px"><input type="checkbox" data-a="svi" data-k="up" '+(d.svi.shut?'':'checked')+'> Interface VLAN 1 aktif</label></div>';
   }
   return h;
@@ -1470,6 +1708,15 @@ function bindModal(){
     if(m==='power'){commit(()=>{d.power=!d.power});renderModal();return}
     if(m==='plug'){commit(()=>{const l=S.links.find(x=>x.id===t.dataset.l);if(l)l.plugged=l.plugged===false});renderModalBody();return}
     if(m==='rmlink'){commit(()=>removeLink(t.dataset.l));renderModalBody();return}
+    if(m==='subadd'){
+      const pn=$('#sb-p').value,v=parseInt($('#sb-v').value);
+      if(!(v>=1&&v<=4094)){toast('Isi VLAN 1 sampai 4094.','bad');return}
+      const nm=pn+'.'+v;
+      if(d.subs[nm]){toast('Subinterface itu sudah ada.','bad');return}
+      if(Object.values(d.subs).some(q=>q.parent===pn&&q.vlan===v)){toast('VLAN itu sudah dipakai subinterface lain pada interface induk ini.','bad');return}
+      commit(()=>{d.subs[nm]={parent:pn,vlan:v,ip:'',mask:'',shut:false,desc:''}});renderModalBody();return;
+    }
+    if(m==='subdel'){commit(()=>{delete d.subs[t.dataset.p]});renderModalBody();return}
     if(m==='routedel'){commit(()=>d.routes.splice(+t.dataset.i,1));renderModalBody();return}
     if(m==='routeadd'){
       const n=$('#rt-n').value.trim(),mk=$('#rt-m').value.trim(),v=$('#rt-v').value.trim();
@@ -1495,7 +1742,20 @@ function bindModal(){
     const bad=(msg)=>{t.classList.add('err');toast(msg,'bad');if(typeof noteMistake==='function')noteMistake()};
     t.classList.remove('err');
     if(a==='name'){const n=str(val,24);if(!n){bad('Nama tidak boleh kosong.');return}commit(()=>{d.name=n});$('.dh h2',dlg).firstChild.textContent=n+' ';return}
-    if(a==='host'||a==='svi'||a==='if'||a==='gw'||a==='ssid'||a==='http'){
+    if(a==='rip'){
+      const k=t.dataset.k;
+      commit(()=>{
+        if(k==='on'){if(val)c_router_rip(d,{});else d.rip=null}
+        else if(d.rip){
+          if(k==='version')d.rip.version=+val===1?1:2;
+          else if(k==='autosum')d.rip.autoSum=!!val;
+          else if(k==='networks'){d.rip.networks=String(val).split(/[\s,]+/).filter(v=>ip2n(v)!==null).slice(0,20)}
+          else if(k==='passive'){const n=t.dataset.p,i=d.rip.passive.indexOf(n);if(val&&i<0)d.rip.passive.push(n);if(!val&&i>=0)d.rip.passive.splice(i,1)}
+        }
+      });
+      if(t.type==='checkbox'||t.tagName==='SELECT')renderModalBody();return;
+    }
+    if(a==='host'||a==='svi'||a==='if'||a==='gw'||a==='ssid'||a==='http'||a==='sub'){
       const k=t.dataset.k;
       if((k==='ip'||k==='gw'||k==='dns')&&val&&ip2n(val)===null){bad('Format IP tidak valid. Contoh: 192.168.1.10');return}
       if(k==='mask'&&val&&!maskOK(val)){bad('Subnet mask tidak valid. Contoh: 255.255.255.0');return}
@@ -1506,9 +1766,12 @@ function bindModal(){
         else if(a==='gw')d.gw=val;
         else if(a==='ssid')d.ssid=str(val,32);
         else if(a==='http'){if(k==='on')d.http.on=val;else d.http.page=str(val,600)}
+        else if(a==='sub'){const f=d.subs[t.dataset.p];if(!f)return;if(k==='up')f.shut=!val;else f[k]=val}
         else{
           const f=d.ifaces[t.dataset.p];if(!f)return;
-          if(k==='up')f.shut=!val;else if(k==='vlan'){f.vlan=parseInt(val);if(!d.vlans[f.vlan])d.vlans[f.vlan]='VLAN'+String(f.vlan).padStart(4,'0');f.mode='access'}
+          if(k==='native'){const n=parseInt(val);f.native=n>=1&&n<=4094?n:1}
+          else if(k==='allowed'){const v=String(val).trim().toLowerCase();if(v===''||v==='all')f.allowed=null;else{const l=parseVlanList(v);if(l)f.allowed=l.length>=4094?null:{inc:l};else{bad('Format VLAN: 10,20,30-40 atau all.');return}}}
+          else if(k==='up')f.shut=!val;else if(k==='vlan'){f.vlan=parseInt(val);if(!d.vlans[f.vlan])d.vlans[f.vlan]='VLAN'+String(f.vlan).padStart(4,'0');f.mode='access'}
           else if(k==='mode')f.mode=val;else f[k]=val;
         }
       });
@@ -1731,7 +1994,7 @@ function sameSubnetAll(list){
 function ifUpWithIp(d){return d.ports.filter(p=>{const f=d.ifaces[p.n];return f&&!f.shut&&ip2n(f.ip)!==null&&maskOK(f.mask)&&ifaceUp(d,p.n)})}
 function gwMatches(h){
   if(!ipOK(h))return false;
-  return S.devices.some(r=>r.type==='router'&&r.ports.some(p=>{const f=r.ifaces[p.n];return f&&!f.shut&&f.ip===h.host.gw&&sameNet(f.ip,h.host.ip,h.host.mask)}));
+  return S.devices.some(r=>r.type==='router'&&(r.ports.some(p=>{const f=r.ifaces[p.n];return f&&!f.shut&&f.ip===h.host.gw&&sameNet(f.ip,h.host.ip,h.host.mask)})||Object.values(r.subs||{}).some(f=>!f.shut&&f.ip===h.host.gw&&sameNet(f.ip,h.host.ip,h.host.mask))));
 }
 function vlanGroups(){
   const g={};
@@ -1815,7 +2078,31 @@ const ACTS=[
  {t:'Perangkat: 1 router, 2 switch, 6 PC, 1 server',how:'Tambahkan dari palet.',tip:'Hitung jumlah tiap perangkat di kanvas.',rec:{devices:['router','switch','pc','server']},ok:()=>byT('router').length>=1&&byT('switch').length>=2&&byT('pc').length>=6&&byT('server').length>=1},
  {t:'Semua kabel terpasang dan semua link hijau',how:'PC dan server ke switch, switch ke router. Straight-through.',tip:'Link router hijau setelah interface dinyalakan.',ok:()=>S.links.length>=9&&allUp()&&countBetween('router','switch')>=1},
  {t:'Semua PC dan server punya IP, mask, dan gateway yang benar',how:'Rancang rencana IP dulu (tab Alur kerja). Gunakan satu atau dua subnet.',tip:'Gateway diisi bila tujuan berada di subnet lain.',ok:()=>hostsAll().length>=7&&hostsAll().every(h=>ipOK(h)&&(gwMatches(h)||ip2n(h.host.gw)===null))},
- {t:'Setiap PC berhasil ping server',how:'Kirim PDU dari tiap PC ke server.',tip:'Gunakan Diagnosa otomatis di tab Alur kerja untuk mencari masalahnya.',ok:()=>{const v=byT('server')[0];const p=byT('pc');return !!v&&p.length>=6&&p.every(x=>canPing(x.id,v.id))&&P.cur.pings>0}}]}
+ {t:'Setiap PC berhasil ping server',how:'Kirim PDU dari tiap PC ke server.',tip:'Gunakan Diagnosa otomatis di tab Alur kerja untuk mencari masalahnya.',ok:()=>{const v=byT('server')[0];const p=byT('pc');return !!v&&p.length>=6&&p.every(x=>canPing(x.id,v.id))&&P.cur.pings>0}}]},
+{id:'a11',lv:2,title:'VLAN di dua switch dengan trunk',goal:'Perluas VLAN 10 dan 20 ke dua switch lewat satu kabel trunk, lalu buktikan PC satu VLAN di switch berbeda saling terjangkau.',concept:'Port trunk membawa frame banyak VLAN dengan tag 802.1Q. Native VLAN lewat tanpa tag dan harus sama di kedua ujung. Daftar allowed VLAN membatasi VLAN yang boleh lewat.',
+ starter:{dev:[{k:'s',t:'switch',n:'Switch0',x:100,y:60},{k:'t',t:'switch',n:'Switch1',x:380,y:60},{k:'a',t:'pc',n:'PC0',x:20,y:230},{k:'b',t:'pc',n:'PC1',x:170,y:230},{k:'c',t:'pc',n:'PC2',x:300,y:230},{k:'d',t:'pc',n:'PC3',x:450,y:230}]},
+ items:[
+ {t:'Sambungkan PC ke switch (straight) dan Switch0 ke Switch1 (crossover, Gi0/1)',how:'Dua PC ke tiap switch lewat Fa0/1 dan Fa0/2. Antar-switch pakai Crossover di Gi0/1 kedua switch.',tip:'Switch dan switch sejenis, jadi crossover.',ok:()=>countBetween('pc','switch')>=4&&upLinks('switch','switch','cross')>=1&&allUp()},
+ {t:'Buat VLAN 10 dan 20 di KEDUA switch, tempatkan satu PC per VLAN di tiap switch',how:'Di tiap switch, tab Konfigurasi: tambah VLAN 10 dan 20. Fa0/1 ke VLAN 10, Fa0/2 ke VLAN 20.',tip:'VLAN harus dibuat di setiap switch, tidak otomatis menyebar.',ok:()=>byT('switch').length>=2&&byT('switch').every(w=>w.vlans[10]&&w.vlans[20])&&vlanGroups().length>=2},
+ {t:'Ubah port Gi0/1 kedua switch menjadi trunk, native VLAN 99, allowed VLAN 10,20,99',how:'Tab Konfigurasi, tabel Port, mode trunk. Atau CLI: switchport mode trunk, switchport trunk native vlan 99, switchport trunk allowed vlan 10,20,99.',tip:'Cek dengan show interfaces trunk. Native VLAN beda di dua ujung membuat lalu lintas tanpa tag salah masuk VLAN.',ok:()=>swLinks().some(l=>trunkOK(l,(a,b)=>a.native===99&&b.native===99&&[10,20,99].every(v=>vlanOK(a,v)&&vlanOK(b,v))))},
+ {t:'Beri IP satu subnet per VLAN',how:'VLAN 10: 192.168.10.x. VLAN 20: 192.168.20.x, mask 255.255.255.0.',tip:'Satu VLAN sama dengan satu subnet.',ok:()=>{const g=vlanGroups();return g.length>=2&&g.every(x=>sameSubnetAll(x.filter(ipOK))&&x.every(ipOK))}},
+ {t:'Buktikan: satu VLAN beda switch bisa ping, beda VLAN tidak',how:'Kirim PDU antar PC satu VLAN yang beda switch (berhasil), lalu antar-VLAN (gagal karena belum ada router).',tip:'Coba ubah allowed VLAN menjadi 10 saja, lalu ping VLAN 20 gagal.',ok:()=>{const g=vlanGroups();if(g.length<2)return false;let cross=false;for(const x of g)for(const a of x)for(const b of x)if(a!==b&&swOf(a)&&swOf(b)&&swOf(a).id!==swOf(b).id&&canPing(a.id,b.id))cross=true;return cross&&!canPing(g[0][0].id,g[1][0].id)&&P.cur.pings>0}}]},
+{id:'a12',lv:2,title:'Router-on-a-stick: routing antar-VLAN',goal:'Hubungkan VLAN 10 dan VLAN 20 lewat satu kabel ke router memakai subinterface.',concept:'PC beda VLAN butuh router. Satu kabel trunk ke router membawa semua VLAN, dan tiap VLAN punya satu subinterface dengan encapsulation dot1q dan IP gateway.',
+ starter:{dev:[{k:'r',t:'router',n:'Router0',x:225,y:20},{k:'s',t:'switch',n:'Switch0',x:225,y:130},{k:'a',t:'pc',n:'PC0',x:100,y:260},{k:'b',t:'pc',n:'PC1',x:350,y:260}]},
+ items:[
+ {t:'Sambungkan PC ke switch (Fa0/1 dan Fa0/2) dan switch Fa0/8 ke router Gi0/0 dengan straight',how:'Semua kabel straight-through. Nyalakan Gi0/0 router (centang Aktif).',tip:'Interface induk harus aktif walau tanpa IP.',ok:()=>countBetween('pc','switch')>=2&&upLinks('switch','router','straight')>=1&&allUp()},
+ {t:'Buat VLAN 10 dan 20, PC0 di VLAN 10 dan PC1 di VLAN 20, port ke router jadi trunk',how:'Switch tab Konfigurasi: VLAN, mode port Fa0/8 trunk.',tip:'Tanpa trunk, router hanya menerima VLAN native.',ok:()=>vlanGroups().length>=0&&(()=>{const w=byT('switch')[0];if(!w||!w.vlans[10]||!w.vlans[20])return false;const m=vlanMap();return(m[10]||[]).length>=1&&(m[20]||[]).length>=1&&swRtLinks().some(l=>{const e=dev(l.a.dev).type==='switch'?l.a:l.b;return dev(e.dev).ifaces[e.port].mode==='trunk'})})()},
+ {t:'Buat subinterface Gi0/0.10 (dot1q 10, 192.168.10.1) dan Gi0/0.20 (dot1q 20, 192.168.20.1)',how:'Router tab Konfigurasi, kartu Subinterface. Atau CLI: interface gi0/0.10, encapsulation dot1q 10, ip address 192.168.10.1 255.255.255.0.',tip:'Urutannya: encapsulation dulu, baru ip address.',ok:()=>{const r=byT('router')[0];if(!r)return false;const q=Object.values(r.subs||{});return q.some(x=>x.vlan===10&&ip2n(x.ip)!==null&&!x.shut)&&q.some(x=>x.vlan===20&&ip2n(x.ip)!==null&&!x.shut)}},
+ {t:'Beri PC IP dan gateway sesuai VLAN-nya',how:'PC0: 192.168.10.10, gateway 192.168.10.1. PC1: 192.168.20.10, gateway 192.168.20.1.',tip:'Gateway PC adalah IP subinterface VLAN-nya.',ok:()=>{const p=byT('pc');return p.length>=2&&p.every(gwMatches)}},
+ {t:'Buktikan PC beda VLAN kini saling ping lewat router',how:'Kirim PDU PC0 ke PC1.',tip:'Mode Simulasi menunjukkan paket naik ke router lalu kembali lewat kabel yang sama.',ok:()=>{const p=byT('pc');return p.length>=2&&canPing(p[0].id,p[1].id)&&P.cur.pings>0}}]},
+{id:'a13',lv:2,title:'Routing dinamis RIP',goal:'Hubungkan dua LAN lewat tiga router dan biarkan RIP mempelajari rute, tanpa rute statis.',concept:'RIP membuat router saling bertukar daftar jaringan. Versi 2 membawa mask. Auto-summary meringkas ke batas kelas dan bisa merusak jaringan yang terpisah, sehingga dimatikan.',
+ starter:{dev:[{k:'a',t:'router',n:'Router0',x:20,y:60},{k:'b',t:'router',n:'Router1',x:225,y:60},{k:'c',t:'router',n:'Router2',x:430,y:60},{k:'s1',t:'switch',n:'Switch0',x:20,y:170},{k:'s2',t:'switch',n:'Switch1',x:430,y:170},{k:'p1',t:'pc',n:'PC0',x:20,y:270},{k:'p2',t:'pc',n:'PC1',x:430,y:270}]},
+ items:[
+ {t:'Pasang kabel: PC ke switch dan switch ke router (straight), router ke router (crossover)',how:'Router0 Gi0/0 ke switch, Gi0/1 ke Router1 Gi0/0. Router1 Gi0/1 ke Router2 Gi0/1. Router2 Gi0/0 ke switch.',tip:'Router dan router sejenis, jadi crossover.',ok:()=>upLinks('router','router','cross')>=2&&upLinks('switch','router','straight')>=2&&allUp()},
+ {t:'Beri IP: LAN 10.1.1.0/24 dan 10.2.2.0/24, link 172.16.0.0/30 dan 172.16.0.4/30, lalu aktifkan interface',how:'Contoh: Router0 Gi0/0 10.1.1.1, Gi0/1 172.16.0.1/30 (mask 255.255.255.252). Router1 Gi0/0 172.16.0.2, Gi0/1 172.16.0.5. Router2 Gi0/1 172.16.0.6, Gi0/0 10.2.2.1. PC: IP dan gateway LAN-nya.',tip:'Link antar-router memakai mask /30.',ok:()=>{const r=byT('router');return r.length>=3&&r.every(d=>ifUpWithIp(d).length>=2)&&byT('pc').length>=2&&byT('pc').every(gwMatches)}},
+ {t:'Aktifkan RIP versi 2 di ketiga router dengan network yang terhubung',how:'CLI tiap router: router rip, version 2, network 10.0.0.0, network 172.16.0.0 (router tengah hanya 172.16.0.0). Atau kartu RIP di tab Konfigurasi.',tip:'network memakai alamat kelas penuh, bukan subnet.',ok:()=>{const r=byT('router');return r.length>=3&&r.every(d=>d.rip&&d.rip.on&&d.rip.version===2&&d.rip.networks.length>0)}},
+ {t:'Matikan auto-summary dan jadikan LAN passive-interface',how:'CLI: no auto-summary, lalu passive-interface gi0/0 di Router0 dan Router2. Kartu RIP punya kotak centang yang sama.',tip:'Kedua LAN berawalan 10.x dan dipisahkan jaringan 172.16. Dengan auto-summary keduanya diumumkan sebagai 10.0.0.0/8 dan router tengah bingung.',ok:()=>{const r=byT('router');return r.length>=3&&r.every(d=>d.rip&&d.rip.autoSum===false)&&r.filter(d=>d.rip&&d.rip.passive.length>0).length>=2}},
+ {t:'Buktikan: show ip route memuat entri R dan PC kedua LAN saling ping',how:'Di CLI Router0 ketik show ip route, cari baris R. Lalu kirim PDU PC0 ke PC1.',tip:'Bila gagal: show ip protocols, cek network, versi, dan lampu link.',ok:()=>{const r=byT('router'),p=byT('pc');return r.length>=3&&p.length>=2&&r.every(d=>!d.routes.length)&&r.some(d=>ripRoutesFor(d).length>0)&&canPing(p[0].id,p[1].id)&&P.cur.pings>0}}]},
 ];
 const actById=id=>ACTS.find(a=>a.id===id);
 function safe(fn){try{return !!fn()}catch(e){return false}}
@@ -1937,7 +2224,7 @@ function diagnose(){
         if(linksAt(d.id,p.n).length&&f.shut)out.push({sev:'bad',text:d.name+' '+short(p.n)+' terhubung kabel tetapi shutdown. Gunakan no shutdown.'});
         else if(linksAt(d.id,p.n).length&&!f.shut&&ip2n(f.ip)===null)out.push({sev:'warn',text:d.name+' '+short(p.n)+' aktif tetapi belum punya IP.'});
       }
-      if(!d.routes.length&&ifUpWithIp(d).length&&byT('router').length>1)out.push({sev:'warn',text:d.name+' belum punya rute statis. Router hanya mengenal jaringan yang terhubung langsung.'});
+      if(!d.routes.length&&!(d.rip&&d.rip.on)&&ifUpWithIp(d).length&&byT('router').length>1)out.push({sev:'warn',text:d.name+' belum punya rute statis atau RIP. Router hanya mengenal jaringan yang terhubung langsung.'});
     }
     if(d.type==='switch')note(d.svi.ip,d.name+' VLAN1');
   }
@@ -2001,8 +2288,9 @@ function infoSections(){
   ['cab','Jenis kabel dan kapan dipakai','<table class="t"><tr><th>Kabel</th><th>Untuk</th></tr><tr><td>Straight-through</td><td>Perangkat berbeda jenis: PC–switch, switch–router, switch–AP</td></tr><tr><td>Crossover</td><td>Perangkat sejenis: PC–PC, switch–switch, PC–router, router–router</td></tr><tr><td>Console</td><td>Konfigurasi lewat terminal: RS232 PC ke port Console</td></tr><tr><td>Fiber optik</td><td>Jarak jauh dan bebas gangguan listrik: port SFP</td></tr><tr><td>Nirkabel</td><td>Laptop ke access point (Wi-Fi)</td></tr></table><p class="small">Aturan mudah: <b>beda jenis → straight, sejenis → crossover</b>. Perangkat modern punya Auto-MDIX sehingga keduanya bekerja. Matikan <i>Periksa jenis kabel</i> di Pengaturan untuk meniru itu.</p><p class="small"><b>Urutan warna T568B</b> (pin 1 sampai 8):</p><div class="row">'+T568.map((c,i)=>'<span class="pill" title="'+c[0]+'"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:'+c[1]+';border:1px solid var(--line)"></i>'+(i+1)+'</span>').join('')+'</div><p class="small muted">'+T568.map((c,i)=>(i+1)+'. '+c[0]).join(' · ')+'. Crossover: satu ujung T568B, ujung lain T568A (pasangan 1–3 dan 2–6 ditukar).</p>'],
   ['dev','Fungsi perangkat jaringan','<table class="t"><tr><th>Perangkat</th><th>Layer</th><th>Tugas</th></tr><tr><td>Hub</td><td>1</td><td>Mengulang sinyal ke semua port</td></tr><tr><td>Switch</td><td>2</td><td>Meneruskan frame berdasar MAC, bisa VLAN</td></tr><tr><td>Router</td><td>3</td><td>Meneruskan paket antar jaringan berdasar IP</td></tr><tr><td>Access point</td><td>2</td><td>Menjembatani Wi-Fi ke kabel</td></tr></table><p class="small">Lampu link: hijau berarti aktif, merah berarti mati, abu-abu berarti tidak ada kabel atau kabel dicabut.</p>'],
   ['ip','Alamat IP, subnet, gateway','<p class="small"><b>IP address</b> mengidentifikasi perangkat. <b>Subnet mask</b> menentukan bagian jaringan dan bagian host. <b>Default gateway</b> adalah router yang dituju untuk keluar dari subnet.</p><p class="small">Contoh: 192.168.1.10/24 → jaringan 192.168.1.0, host 1 sampai 254. IP di subnet berbeda hanya bisa berkomunikasi lewat router.</p><div class="g2"><div class="fld"><label for="c-ip">IP address</label><input type="text" id="c-ip" data-in="calc" data-k="ip" value="'+esc(UI.calc.ip)+'" autocomplete="off"></div><div class="fld"><label for="c-p">Prefix (/n)</label><input type="number" id="c-p" min="0" max="32" data-in="calc" data-k="p" value="'+esc(UI.calc.p)+'"></div></div><div id="calc-out" style="margin-top:8px">'+calcHTML()+'</div>'],
-  ['vlan','VLAN','<p class="small">VLAN membagi satu switch menjadi beberapa jaringan logis. PC beda VLAN tidak bisa saling ping meski satu switch, kecuali lewat router. Port <b>access</b> membawa satu VLAN, port <b>trunk</b> membawa banyak VLAN antar-switch.</p><pre class="mono small card" style="white-space:pre-wrap;margin:0">vlan 10\n name GURU\ninterface fa0/1\n switchport mode access\n switchport access vlan 10</pre>'],
+  ['vlan','VLAN','<p class="small">VLAN membagi satu switch menjadi beberapa jaringan logis. PC beda VLAN tidak bisa saling ping meski satu switch, kecuali lewat router. Port <b>access</b> membawa satu VLAN, port <b>trunk</b> membawa banyak VLAN dengan tag 802.1Q antar-switch atau ke router. Native VLAN lewat tanpa tag dan harus sama di kedua ujung, allowed VLAN membatasi yang boleh lewat. Untuk antar-VLAN pakai <b>router-on-a-stick</b>: satu kabel trunk ke router, satu subinterface (<span class="mono">encapsulation dot1q</span>) per VLAN.</p><pre class="mono small card" style="white-space:pre-wrap;margin:0">vlan 10\n name GURU\ninterface fa0/1\n switchport mode access\n switchport access vlan 10</pre>'],
   ['rt','Routing statis','<p class="small">Router otomatis mengenal jaringan yang terhubung langsung (C). Jaringan lain dibuat manual dengan rute statis, dan harus dibuat di <b>kedua arah</b> supaya balasan bisa pulang.</p><pre class="mono small card" style="white-space:pre-wrap;margin:0">ip route 10.2.2.0 255.255.255.0 172.16.0.2\nshow ip route</pre>'],
+  ['rip','Routing dinamis RIP','<p class="small">RIP membuat router saling mengumumkan jaringan yang mereka kenal. Metrik adalah jumlah hop (maksimal 15). Distance statis 1 lebih diutamakan daripada RIP (120).</p><pre class="mono small card" style="white-space:pre-wrap;margin:6px 0">router rip\n version 2\n no auto-summary\n network 10.0.0.0\n passive-interface gi0/0</pre><ul class="small" style="margin:0;padding-left:18px"><li><b>network</b> memakai alamat berkelas dan menentukan interface yang ikut RIP.</li><li><b>passive-interface</b> mengumumkan LAN tetapi tidak mencari tetangga lewat LAN.</li><li><b>auto-summary</b> meringkas ke batas kelas dan merusak jaringan yang terpisah (discontiguous). Matikan di versi 2.</li><li>Periksa dengan <span class="mono">show ip route</span> (baris R) dan <span class="mono">show ip protocols</span>.</li></ul>'],
   ['osi','Model OSI dan TCP/IP','<table class="t"><tr><th>#</th><th>Layer OSI</th><th>Contoh</th></tr><tr><td>7</td><td>Application</td><td>HTTP, DNS</td></tr><tr><td>6</td><td>Presentation</td><td>Enkripsi, format data</td></tr><tr><td>5</td><td>Session</td><td>Sesi antar aplikasi</td></tr><tr><td>4</td><td>Transport</td><td>TCP, UDP</td></tr><tr><td>3</td><td>Network</td><td>IP, ICMP, router</td></tr><tr><td>2</td><td>Data link</td><td>Ethernet, MAC, switch</td></tr><tr><td>1</td><td>Physical</td><td>Kabel, port, sinyal</td></tr></table>'],
   ['ping','Bagaimana ping bekerja','<ol class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>PC membandingkan IP tujuan dengan subnet sendiri.</li><li>Satu subnet: kirim langsung. Beda subnet: kirim ke default gateway.</li><li>ARP mencari alamat MAC tujuan. Itu sebabnya balasan pertama sering <i>Request timed out</i>.</li><li>Switch meneruskan frame berdasar MAC dan VLAN.</li><li>Router membaca IP tujuan, menurunkan TTL, mencari rute, lalu meneruskan.</li><li>Tujuan membalas dengan ICMP echo reply lewat jalur yang sama atau jalur pulang.</li></ol>'],
   ['cli','Contekan perintah CLI','<table class="t"><tr><th>Perintah</th><th>Fungsi</th></tr><tr><td class="mono">enable</td><td>Masuk mode privileged</td></tr><tr><td class="mono">configure terminal</td><td>Masuk mode konfigurasi</td></tr><tr><td class="mono">hostname NAMA</td><td>Ganti nama perangkat</td></tr><tr><td class="mono">interface gi0/0</td><td>Pilih interface</td></tr><tr><td class="mono">ip address IP MASK</td><td>Beri IP pada interface</td></tr><tr><td class="mono">no shutdown</td><td>Nyalakan interface</td></tr><tr><td class="mono">show ip interface brief</td><td>Ringkasan status interface</td></tr><tr><td class="mono">show running-config</td><td>Tampilkan konfigurasi</td></tr><tr><td class="mono">show vlan brief</td><td>Daftar VLAN (switch)</td></tr><tr><td class="mono">ping IP</td><td>Uji koneksi</td></tr><tr><td class="mono">?</td><td>Bantuan, Tab melengkapi</td></tr></table>'],
@@ -2019,8 +2307,8 @@ function bindPanelExtras(){
 }
 /* ================= ASESMEN PRAKTIK PjBL ================= */
 const AS_KEY='tjkt-asesmen-v1',AS_SALT='tjkt-asesmen-2026';
-const AS={phase:'idle',id:{sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',nama:'',kelas:'',absen:'',nis:'',paket:'auto',durasi:90},
-  start:0,end:0,notes:{tujuan:'',kebutuhan:'',topologi:'',ip:'',kendala:'',kesimpulan:''},checks:0,lastCheck:null,tests:[],webBy:[],agree:false,result:null,err:'',saved:{pdf:false,json:false},over:false};
+const AS={phase:'idle',id:{sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',nama:'',kelas:'',absen:'',nis:'',paket:'auto',durasi:90,tanggal:'',aturanAt:0},
+  start:0,end:0,notes:{tujuan:'',kebutuhan:'',topologi:'',ip:'',kendala:'',kesimpulan:''},checks:0,lastCheck:null,tests:[],webBy:[],agree:false,result:null,err:'',saved:{pdf:false,json:false},over:false,rules:false};
 let ROLE='tamu';
 const NAMEPFX={pc:'PC',laptop:'LPT',server:'SRV',printer:'PRN',switch:'SW',router:'RTR',ap:'AP'};
 const NOTE_FIELDS=[
@@ -2047,7 +2335,7 @@ function loadAses(){
 const asesActive=()=>AS.phase==='run'&&ROLE!=='guru';
 function asesX(){return parseInt(AS.id.absen)||0}
 function asesPaket(){
-  const p=AS.id.paket;if(['A','B','C','D'].includes(p))return p;
+  const p=AS.id.paket;if(['A','B','C','D','E','F'].includes(p))return p;
   return asesX()%2===1?'A':'B';
 }
 function fmt1(n){return(Math.round(n*10)/10).toFixed(1).replace('.',',')}
@@ -2071,7 +2359,15 @@ function paketInfo(p,x){
    D:{title:'Pemisahan Ruang Admin dan Tamu (VLAN)',tingkat:'Pengayaan',
      skenario:'Satu switch dipakai dua ruangan, admin dan tamu. Lalu lintas kedua ruangan harus terpisah.',
      ketentuan:['Semua PC memakai '+nA+', mask 255.255.255.0.','VLAN 10 bernama ADMIN untuk dua PC, VLAN 20 bernama TAMU untuk dua PC lainnya.','Tata nama: PC-01 sampai PC-04, SW-01.'],
-     tugas:[['Pasang perangkat','1 switch dan 4 PC.'],['Pasang kabel','Straight dari tiap PC ke switch.'],['Konfigurasi','IP unik, buat VLAN 10 dan 20, pasang dua port ke tiap VLAN.'],['Uji','PC satu VLAN saling ping berhasil. PC beda VLAN tidak bisa ping dan Anda membuktikannya.']]}
+     tugas:[['Pasang perangkat','1 switch dan 4 PC.'],['Pasang kabel','Straight dari tiap PC ke switch.'],['Konfigurasi','IP unik, buat VLAN 10 dan 20, pasang dua port ke tiap VLAN.'],['Uji','PC satu VLAN saling ping berhasil. PC beda VLAN tidak bisa ping dan Anda membuktikannya.']]},
+   E:{title:'VLAN Antar-Switch, Trunk, dan Router-on-a-Stick',tingkat:'Tantangan',
+     skenario:'Dua lantai gedung memakai VLAN yang sama: ADMIN dan TAMU. Switch lantai satu dan dua dihubungkan trunk, dan satu router menghubungkan kedua VLAN lewat satu kabel (router-on-a-stick).',
+     ketentuan:['VLAN 10 ADMIN: '+nA+'/24, gateway 192.168.'+x+'.1.','VLAN 20 TAMU: '+nB+'/24, gateway 192.168.'+(x+100)+'.1.','Trunk antar-switch memakai native VLAN 99 dan mengizinkan VLAN 10, 20, dan 99. Switch ke router juga trunk.','Router memakai subinterface dengan encapsulation dot1q 10 dan 20.','Tata nama: RTR-01, SW-01, SW-02, PC-01 sampai PC-04.'],
+     tugas:[['Pasang perangkat','1 router, 2 switch, 4 PC.'],['Pasang kabel','Straight dari PC ke switch dan dari switch ke router. Crossover antara SW-01 dan SW-02.'],['Konfigurasi switch','Buat VLAN 10 ADMIN dan 20 TAMU di kedua switch. Satu PC VLAN 10 dan satu PC VLAN 20 di tiap switch. Atur port trunk, native VLAN, dan allowed VLAN.'],['Konfigurasi router','Nyalakan interface induk tanpa IP, buat subinterface dot1q 10 dan 20 dengan IP gateway. Lalu IP dan gateway tiap PC.'],['Uji','PC satu VLAN beda switch saling ping (bukti trunk). PC beda VLAN saling ping (bukti router-on-a-stick).']]},
+   F:{title:'Routing Dinamis RIP Tiga Router',tingkat:'Tantangan',
+     skenario:'Dua kantor cabang dihubungkan lewat router pusat. Rute antar-kantor tidak boleh ditulis manual. Semua router harus belajar rute dengan RIP.',
+     ketentuan:['LAN kantor A: 10.'+x+'.10.0/24, gateway 10.'+x+'.10.1 di RTR-01.','LAN kantor B: 10.'+x+'.20.0/24, gateway 10.'+x+'.20.1 di RTR-03.','Link RTR-01 ke RTR-02: 192.168.'+x+'.0/30. Link RTR-02 ke RTR-03: 192.168.'+x+'.4/30.','RIP versi 2 dan no auto-summary. Kedua LAN sama-sama berawalan 10.x dan dipisahkan jaringan 192.168, sehingga auto-summary membuat rute bentrok.','Tanpa rute statis. LAN dibuat passive-interface. Tata nama: RTR-01 sampai RTR-03, SW-01, SW-02, PC-01, PC-02.'],
+     tugas:[['Pasang perangkat','3 router, 2 switch, 2 PC.'],['Pasang kabel','Straight untuk PC ke switch dan switch ke router. Crossover untuk router ke router.'],['Konfigurasi interface','Nyalakan semua interface router dan beri IP sesuai tabel (mask /24 untuk LAN, /30 untuk link). IP dan gateway PC.'],['Konfigurasi RIP','router rip, version 2, network (jaringan yang terhubung), no auto-summary, passive-interface pada LAN.'],['Uji','show ip route memuat entri R. PC-01 dan PC-02 saling ping.']]}
   };
   return I[p];
 }
@@ -2083,7 +2379,7 @@ function dupIpFree(){
   const note=ip=>{if(ip2n(ip)!==null){seen[ip]=(seen[ip]||0)+1;n++}};
   for(const d of S.devices){
     if(isHost(d.type))note(d.host.ip);
-    else if(d.type==='router')for(const p of d.ports){const f=d.ifaces[p.n];if(f)note(f.ip)}
+    else if(d.type==='router'){for(const p of d.ports){const f=d.ifaces[p.n];if(f)note(f.ip)}for(const k of Object.keys(d.subs||{}))note(d.subs[k].ip)}
     else if(d.type==='switch')note(d.svi.ip);
   }
   return n>=2&&Object.keys(seen).every(k=>seen[k]===1);
@@ -2107,6 +2403,13 @@ function vlanMap(){
   }
   return g;
 }
+
+function swOf(h){for(const l of S.links){if(!linkUp(l))continue;const o=l.a.dev===h.id?dev(l.b.dev):(l.b.dev===h.id?dev(l.a.dev):null);if(o&&o.type==='switch')return o}return null}
+function swLinks(){return S.links.filter(l=>{if(!linkUp(l))return false;const a=dev(l.a.dev),b=dev(l.b.dev);return a.type==='switch'&&b.type==='switch'})}
+function trunkOK(l,pred){const fa=dev(l.a.dev).ifaces[l.a.port],fb=dev(l.b.dev).ifaces[l.b.port];return !!fa&&!!fb&&fa.mode==='trunk'&&fb.mode==='trunk'&&pred(fa,fb)}
+function swRtLinks(){return S.links.filter(l=>{if(!linkUp(l))return false;const a=dev(l.a.dev),b=dev(l.b.dev);return(a.type==='switch'&&b.type==='router')||(a.type==='router'&&b.type==='switch')})}
+function subHas(r,v,net){return Object.values(r.subs||{}).some(s=>s.vlan===v&&!s.shut&&ip2n(s.ip)!==null&&s.mask==='255.255.255.0'&&sameNet(s.ip,net,'255.255.255.0')&&s.ip===net.replace(/\.0$/,'.1'))}
+function ripHas(r,net){return ripRoutesFor(r).some(q=>sameNet(q.net,net,'255.255.255.0')&&q.mask==='255.255.255.0')}
 function pairFrac(list,pairs){if(!pairs.length)return 0;return pairs.filter(p=>canPing(p[0].id,p[1].id)).length/pairs.length}
 function asesItems(p,ctx){
   const x=ctx.x,nA='192.168.'+x+'.0',nB='192.168.'+(x+100)+'.0';
@@ -2155,6 +2458,38 @@ function asesItems(p,ctx){
     add('ip','Tidak ada IP ganda',3,()=>dupIpFree());
     add('uji','PC satu gedung saling ping',5,()=>{const a=pcs.filter(d=>netIn(d,nA)),b=pcs.filter(d=>netIn(d,nB));const pr=[];if(a.length>=2)pr.push([a[0],a[1]]);if(b.length>=2)pr.push([b[0],b[1]]);return pr.length?clip(pairFrac(pcs,pr)*pr.length/2):0});
     add('uji','PC lintas gedung saling ping',10,()=>{const a=pcs.filter(d=>netIn(d,nA)),b=pcs.filter(d=>netIn(d,nB));let ok=0;for(const i of a)for(const j of b)if(canPing(i.id,j.id))ok++;return clip(ok/4)});
+  }else if(p==='E'){
+    const r=rt[0],vm=vlanMap(),v10=vm[10]||[],v20=vm[20]||[],nA2='192.168.'+x+'.0',nB2='192.168.'+(x+100)+'.0';
+    add('dev','1 router',2,()=>rt.length>=1);add('dev','2 switch',3,()=>clip(sw.length/2));add('dev','4 PC',3,()=>clip(pcs.length/4));
+    add('cab','PC ke switch dengan straight, link hijau',4,()=>clip(upLinks('pc','switch','straight')/4));
+    add('cab','SW-01 ke SW-02 dengan crossover',3,()=>upLinks('switch','switch','cross')>=1);
+    add('cab','Switch ke router dengan straight',3,()=>upLinks('switch','router','straight')>=1);
+    add('ip','VLAN 10 ADMIN dan VLAN 20 TAMU ada di kedua switch',4,()=>sw.length?clip(sw.slice(0,2).reduce((a,s)=>a+((s.vlans[10]&&String(s.vlans[10]).toUpperCase()==='ADMIN'?1:0)+(s.vlans[20]&&String(s.vlans[20]).toUpperCase()==='TAMU'?1:0))/2,0)/2):0);
+    add('ip','Dua PC pada VLAN 10 dan dua PC pada VLAN 20',3,()=>clip((Math.min(2,v10.length)+Math.min(2,v20.length))/4));
+    add('ip','Port antar-switch dan port ke router berstatus trunk',4,()=>{const a=swLinks().some(l=>trunkOK(l,()=>true));const b=swRtLinks().some(l=>{const s=dev(l.a.dev).type==='switch'?l.a:l.b;return dev(s.dev).ifaces[s.port].mode==='trunk'});return((a?1:0)+(b?1:0))/2});
+    add('ip','Trunk antar-switch: native VLAN 99, VLAN 10, 20, 99 diizinkan',5,()=>swLinks().some(l=>trunkOK(l,(fa,fb)=>fa.native===99&&fb.native===99&&[10,20,99].every(v=>vlanOK(fa,v)&&vlanOK(fb,v)))));
+    add('ip','Router: subinterface dot1q 10 dan 20 dengan IP gateway',6,()=>!r?0:((subHas(r,10,nA2)?1:0)+(subHas(r,20,nB2)?1:0))/2);
+    add('ip','PC memakai IP satu jaringan VLAN dan gateway yang benar',5,()=>clip((v10.filter(h=>netIn(h,nA2)&&gwMatches(h)).length+v20.filter(h=>netIn(h,nB2)&&gwMatches(h)).length)/4));
+    add('ip','Tidak ada IP ganda',2,()=>dupIpFree());
+    add('uji','PC satu VLAN beda switch saling ping (bukti trunk)',8,()=>{const pr=[];for(const L of[v10,v20])for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++)if(swOf(L[i])&&swOf(L[j])&&swOf(L[i]).id!==swOf(L[j]).id)pr.push([L[i],L[j]]);return pr.length?clip(pairFrac(pcs,pr.slice(0,2))):0});
+    add('uji','PC beda VLAN saling ping lewat router (bukti router-on-a-stick)',10,()=>{let ok=0,n=0;for(const i of v10.slice(0,2))for(const j of v20.slice(0,2)){n++;if(canPing(i.id,j.id))ok++}return n?ok/n:0});
+    add('uji','PC dapat ping gateway subinterface',2,()=>{let ok=0,n=0;for(const h of[...v10.slice(0,1),...v20.slice(0,1)]){n++;if(r&&h.host.gw&&pingOnce(h.id,h.host.gw,true).ok)ok++}return n?ok/n:0});
+  }else if(p==='F'){
+    const R3=rt.slice(0,3),sp=byT('router').every(d=>!d.routes.length);
+    const lA='10.'+x+'.10.0',lB='10.'+x+'.20.0',pa=pcs.filter(h=>netIn(h,lA)),pb=pcs.filter(h=>netIn(h,lB)),isLan=d=>ifNames(d).some(n=>{const f=ifObj(d,n);return f&&f.ip.indexOf('10.')===0});
+    add('dev','3 router',3,()=>clip(rt.length/3));add('dev','2 switch',2,()=>clip(sw.length/2));add('dev','2 PC',3,()=>clip(pcs.length/2));
+    add('cab','PC ke switch dan switch ke router dengan straight',5,()=>clip((upLinks('pc','switch','straight')+upLinks('switch','router','straight'))/4));
+    add('cab','Router ke router dengan crossover (2 link)',5,()=>clip(upLinks('router','router','cross')/2));
+    add('cab','Tidak ada kabel yang link-nya mati',2,()=>S.links.length>0?S.links.filter(l=>l.cable==='console'||linkUp(l)).length/S.links.length:0);
+    add('ip','Semua interface router yang dipakai aktif dan ber-IP',5,()=>R3.length?clip(R3.reduce((a,d)=>a+ifUpWithIp(d).length,0)/6):0);
+    add('ip','LAN A dan LAN B memakai gateway router yang benar',4,()=>clip((pa.filter(gwMatches).length>0?1:0)/2+(pb.filter(gwMatches).length>0?1:0)/2));
+    add('ip','RIP aktif di ketiga router',4,()=>R3.length?clip(R3.filter(d=>d.rip&&d.rip.on&&d.rip.networks.length).length/3):0);
+    add('ip','RIP versi 2 dan no auto-summary di semua router',5,()=>R3.length?clip(R3.filter(d=>d.rip&&d.rip.on&&d.rip.version===2&&d.rip.autoSum===false).length/3):0);
+    add('ip','LAN dibuat passive-interface di RTR-01 dan RTR-03',2,()=>{const E=R3.filter(isLan);return E.length?clip(E.filter(d=>d.rip&&(d.rip.passive||[]).length>0).length/2):0});
+    add('ip','Tidak memakai rute statis dan tidak ada IP ganda',3,()=>sp&&dupIpFree());
+    add('uji','Tabel rute ujung memuat entri R ke LAN seberang',6,()=>{let ok=0;for(const d of R3.filter(isLan)){if(ripRoutesFor(d).some(q=>q.net.indexOf('10.')===0))ok++}return clip(ok/2)});
+    add('uji','PC kantor A ping PC kantor B',8,()=>pa.length&&pb.length?canPing(pa[0].id,pb[0].id):0);
+    add('uji','PC kantor B ping PC kantor A',6,()=>pa.length&&pb.length?canPing(pb[0].id,pa[0].id):0);
   }else{
     const vm=vlanMap(),v10=vm[10]||[],v20=vm[20]||[];
     add('dev','1 switch',2,()=>sw.length>=1);add('dev','4 PC',4,()=>clip(pcs.length/4));
@@ -2207,17 +2542,40 @@ function asesTick(){
   }else if(b)b.hidden=true;
 }
 /* ---------- panel ---------- */
-const ASF=(k,label,type,extra)=>'<div class="fld"><label for="asf-'+k+'">'+label+'</label><input id="asf-'+k+'" type="'+(type||'text')+'" data-in="asf" data-ch="asf" data-k="'+k+'" value="'+esc(AS.id[k])+'" autocomplete="off" '+(extra||'')+'></div>';
+const ASF=(k,label,type,extra)=>'<div class="fld"><label for="asf-'+k+'">'+label+'</label><input id="asf-'+k+'" type="'+(type||'text')+'" data-in="asf" data-ch="asf" data-k="'+k+'" value="'+esc(AS.id[k])+'" autocomplete="off" '+(ROLE==='siswa'?'readonly ':'')+(extra||'')+'></div>';
 function panelAses(){
   const id=(typeof cbIdCard==='function')?cbIdCard():'';
   if(AS.phase==='run')return id+asRun();
   if(AS.phase==='done')return id+asDone();
   return asIdle();
 }
+
+function asesAturan(){
+  const L=[];
+  L.push('Kerjakan sendiri. Bekerja sama, menyontek, atau meminta bantuan orang lain selama asesmen berlangsung adalah pelanggaran.');
+  L.push('Waktu pengerjaan <b><span id="as-dur">'+GP.durasi+'</span> menit</b>, dihitung sejak tombol Mulai asesmen ditekan. Guru dapat mengubah durasi sewaktu-waktu dan perubahannya langsung berlaku di layar Anda.');
+  if(GP.alarmMenit>0)L.push('Alarm, getar, dan efek api muncul '+GP.alarmMenit+' menit sebelum waktu habis. Setelah waktu habis segera tekan Selesai dan simpan.');
+  if(GP.wajibFS)L.push('Layar penuh wajib. Keluar dari layar penuh, berpindah tab, atau membuka aplikasi lain dicatat sebagai pelanggaran.');
+  if(GP.blokirSalin)L.push('Salin, tempel, dan klik kanan diblokir selama asesmen.');
+  if(GP.maxViol>0)L.push('Setelah '+GP.maxViol+' pelanggaran layar Anda terkunci otomatis. Hanya guru atau pengawas yang dapat membukanya.');
+  if(GP.alarmViol)L.push('Setiap pelanggaran memunculkan alarm dan getaran, dan terlihat oleh guru di Ruang Pantau.');
+  L.push('Cek mandiri hanya '+GP.maxCek+' kali dan hanya menunjukkan butir yang sudah sesuai.');
+  L.push('Templat, aktivitas latihan, diagnosa otomatis, dan pemuatan proyek dikunci. Tab Info boleh dibuka.');
+  if(!GP.allow3D)L.push('Tampilan 3D tidak diperbolehkan.');
+  if(!GP.allowCLI)L.push('CLI router dan switch tidak diperbolehkan.');
+  L.push('Pekerjaan tersimpan otomatis. Jangan menutup atau memuat ulang halaman. Bila terputus, masuk lagi dengan token dan identitas yang sama.');
+  L.push('Setelah selesai, simpan laporan PDF dan berkas JSON, lalu kumpulkan sesuai arahan guru.');
+  for(const x of String(GP.aturan||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean).slice(0,15))L.push(esc(x));
+  return L;
+}
+function asTodayStr(){return new Date(Date.now()+((typeof CB!=='undefined'&&CB.skew)||0)).toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'})}
+function asTglFmt(s){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');if(!m)return '';return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],12)).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})}
 function asIdle(){
   let h='<div class="card"><h3>Asesmen praktik akhir semester</h3><p class="small">Kerjakan satu proyek jaringan dari awal sampai akhir, mengikuti enam tahap alur kerja: rancang, pasang perangkat, pasang kabel, konfigurasi, uji, dokumentasi. Hasilnya disimpan sebagai berkas untuk diunggah ke Google Classroom.</p><ul class="small" style="margin:6px 0 0;padding-left:18px"><li>Kanvas dikosongkan saat asesmen dimulai.</li><li>Templat, aktivitas, dan diagnosa otomatis dikunci selama asesmen.</li><li>Tab Info tetap boleh dipakai sebagai referensi.</li></ul></div>';
   h+='<div class="card"><h3>Identitas siswa</h3><div class="g2">'+ASF('nama','Nama lengkap','text','maxlength="60"')+ASF('kelas','Kelas','text','maxlength="20" placeholder="X TJKT 1"')+ASF('absen','Nomor absen','number','min="1" max="99"')+ASF('nis','NIS (opsional)','text','maxlength="20"')+'</div>';
-  h+='<p class="small muted" style="margin:8px 0 0">Paket: '+(GP.paket==='auto'?'ditentukan dari nomor absen':'Paket '+GP.paket)+' · waktu '+GP.durasi+' menit · Cek mandiri '+GP.maxCek+' kali.</p>';
+  h+='<p class="small muted" style="margin:8px 0 0">Paket: '+(GP.paket==='auto'?'ditentukan dari nomor absen':'Paket '+GP.paket)+' · Cek mandiri '+GP.maxCek+' kali.</p>';
+  if(GP.tanggal)h+='<p class="small" style="margin:6px 0 0">Tanggal pelaksanaan: <b>'+esc(asTglFmt(GP.tanggal))+'</b></p>';
+  h+='</div><div class="card"><h3>Tata tertib asesmen</h3><p class="small muted" style="margin:0 0 6px">Baca seluruhnya sebelum mulai.</p><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px">'+asesAturan().map(x=>'<li>'+x+'</li>').join('')+'</ol><label class="row" style="align-items:flex-start;margin-top:10px"><input type="checkbox" id="as-rules" data-ch="asrules" '+(AS.rules?'checked':'')+'> <span class="small">Saya sudah membaca dan menyetujui tata tertib asesmen ini.</span></label>';
   if(AS.err)h+='<p class="small" style="color:var(--bad);margin:8px 0 0" role="alert">'+esc(AS.err)+'</p>';
   h+='<div class="row" style="margin-top:10px"><button class="btn pri" data-act="asstart">Mulai asesmen</button></div></div>';
   return h;
@@ -2247,22 +2605,24 @@ function asDone(){
 }
 /* ---------- aksi ---------- */
 function asValidate(){
-  AS.id.sekolah=GP.sekolah;AS.id.mapel=GP.mapel;AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;
+  AS.id.sekolah=GP.sekolah;AS.id.mapel=GP.mapel;AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;AS.id.tanggal=GP.tanggal||'';
   const i=AS.id,a=parseInt(i.absen),d=parseInt(i.durasi);
   if(String(i.nama).trim().length<3)return 'Isi nama lengkap (minimal 3 huruf).';
   if(!String(i.kelas).trim())return 'Isi kelas, misalnya X TJKT 1.';
   if(GP.reqNIS&&String(i.nis).trim().length<4)return 'Isi NIS.';
   if(!(a>=1&&a<=99))return 'Nomor absen harus antara 1 dan 99.';
-  if(!(d>=30&&d<=180))return 'Durasi harus antara 30 dan 180 menit.';
+  if(!(d>=10&&d<=300))return 'Durasi harus antara 10 dan 300 menit.';
+  if(GP.tanggal&&asTodayStr()<GP.tanggal)return 'Asesmen ini dijadwalkan pada '+asTglFmt(GP.tanggal)+'. Belum bisa dimulai.';
+  if(!AS.rules)return 'Centang persetujuan tata tertib terlebih dahulu.';
   return '';
 }
 PA.asstart=()=>{
   AS.err=asValidate();
   if(AS.err){renderPanel();return}
-  AS.id.nama=String(AS.id.nama).trim();AS.id.nis=String(AS.id.nis).trim();AS.id.kelas=String(AS.id.kelas).trim();AS.id.absen=parseInt(AS.id.absen);AS.id.durasi=parseInt(AS.id.durasi);
+  AS.id.nama=String(AS.id.nama).trim();AS.id.nis=String(AS.id.nis).trim();AS.id.kelas=String(AS.id.kelas).trim();AS.id.absen=parseInt(AS.id.absen);AS.id.durasi=parseInt(AS.id.durasi);AS.id.aturanAt=Date.now();
   pushUndo();resetState();S.settings.strict=true;
   P.cur=null;saveProfile();UI.sel=null;UI.events=[];UI.diag=null;
-  AS.phase='run';AS.start=Date.now();AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
+  AS.rules=false;AS.phase='run';AS.start=Date.now();AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
   for(const k of Object.keys(AS.notes))AS.notes[k]='';
   saveAses();UI.tab='ases';markTabs();afterChange();asesTick();
   requestAnimationFrame(()=>fitView());
@@ -2279,6 +2639,7 @@ PCH.asf=el=>{
   AS.id[k]=el.value;AS.err='';saveAses();
 };
 PCH.asn=el=>{const k=el.dataset.k;if(k in AS.notes){AS.notes[k]=el.value;saveAses()}};
+PCH.asrules=el=>{AS.rules=el.checked;AS.err=''};
 PCH.asagree=el=>{AS.agree=el.checked;AS.err='';saveAses()};
 PA.asabort=()=>{
   showDlg(dlgShell('Batalkan asesmen?','<p>Semua pekerjaan asesmen ini dihapus dan Anda kembali ke formulir identitas.</p><div class="row"><button class="btn bad" data-g="asabort2">Ya, batalkan</button><button class="btn" data-g="close">Kembali</button></div>'),true);
@@ -2287,7 +2648,7 @@ PA.asredo=()=>{
   showDlg(dlgShell('Ulangi asesmen?','<p>Hasil asesmen yang tersimpan di browser ini dihapus. Pastikan berkas PDF dan JSON sudah Anda simpan dan unggah.</p><div class="row"><button class="btn bad" data-g="asabort2">Ya, ulangi</button><button class="btn" data-g="close">Kembali</button></div>'),true);
 };
 function asReset(){
-  AS.phase='idle';AS.start=0;AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
+  AS.rules=false;AS.phase='idle';AS.start=0;AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
   for(const k of Object.keys(AS.notes))AS.notes[k]='';
   saveAses();asesTick();
 }
@@ -2337,7 +2698,7 @@ function fileBase(){
 function buildJSON(){
   const r=AS.result,id=AS.id;
   return JSON.stringify({format:'tjkt-asesmen-v1',identitas:{sekolah:id.sekolah,mapel:id.mapel,nama:id.nama,kelas:id.kelas,absen:id.absen,nis:id.nis},paket:asesPaket(),x:asesX(),
-    waktu:{mulai:AS.start,selesai:r.selesai,alokasiMenit:id.durasi},skor:r.skor,jawaban:AS.notes,bukti:AS.tests,webBy:AS.webBy,proyek:JSON.parse(r.proyek),kode:r.kode},null,1);
+    waktu:{mulai:AS.start,selesai:r.selesai,alokasiMenit:id.durasi,tanggalPelaksanaan:id.tanggal||'',tataTertibDisetujui:id.aturanAt||0},skor:r.skor,jawaban:AS.notes,bukti:AS.tests,webBy:AS.webBy,proyek:JSON.parse(r.proyek),kode:r.kode},null,1);
 }
 /* ---------- penulis PDF sederhana (Helvetica, tanpa pustaka) ---------- */
 const HWR=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
@@ -2481,7 +2842,7 @@ function buildReport(){
   pdf.para('Sumatif Akhir Semester Ganjil - Kelas X - Pembelajaran Berbasis Proyek (PjBL)',10,{color:'#333333',after:1});
   pdf.para(id.sekolah+' - '+id.mapel,9.5,{color:'#566578',after:6});
   pdf.h2('Identitas');
-  pdf.table(null,[['Nama',id.nama],['Kelas',id.kelas],['Nomor absen',String(id.absen)],['NIS',id.nis||'-'],['Paket proyek','Paket '+p+': '+info.title+' ('+info.tingkat+')'],['Jaringan siswa','192.168.'+x+'.0/24'+(p==='A'||p==='C'?' dan 192.168.'+(x+100)+'.0/24':'')],['Mulai',dt(AS.start)],['Selesai',dt(r.selesai)],['Waktu dipakai',dur+' menit dari alokasi '+id.durasi+' menit']],[110,pdf.cw-110],{boldFirst:true,size:9});
+  pdf.table(null,[['Nama',id.nama],['Kelas',id.kelas],['Nomor absen',String(id.absen)],['NIS',id.nis||'-'],['Paket proyek','Paket '+p+': '+info.title+' ('+info.tingkat+')'],['Jaringan siswa',p==='F'?'10.'+x+'.10.0/24, 10.'+x+'.20.0/24, link 192.168.'+x+'.0/30 dan .4/30':'192.168.'+x+'.0/24'+(['A','C','E'].includes(p)?' dan 192.168.'+(x+100)+'.0/24':'')],['Tanggal pelaksanaan',asTglFmt(id.tanggal)||'-'],['Tata tertib disetujui',id.aturanAt?dt(id.aturanAt):'-'],['Mulai',dt(AS.start)],['Selesai',dt(r.selesai)],['Waktu dipakai',dur+' menit dari alokasi '+id.durasi+' menit']],[110,pdf.cw-110],{boldFirst:true,size:9});
   pdf.h2('Ringkasan nilai');
   const bw=(pdf.cw-16)/3;pdf.ensure(54);
   [['Nilai otomatis',fmt1(r.skor.otomatis)+' / 70'],['Nilai guru','........ / 30'],['Nilai akhir','........ / 100']].forEach((b,i)=>{
@@ -2507,8 +2868,8 @@ function buildReport(){
   const ipRows=[];
   for(const d of snap.devices){
     if(d.host)ipRows.push([d.name,DEVLBL[d.type],d.host.ip||'-',d.host.mask||'-',d.host.gw||'-']);
-    else if(d.type==='router'){const fs=Object.keys(d.ifaces).filter(k=>d.ifaces[k].ip);if(!fs.length)ipRows.push([d.name,'Router','-','-','-']);for(const k of fs)ipRows.push([d.name+' '+short(k),'Router',d.ifaces[k].ip,d.ifaces[k].mask,d.ifaces[k].shut?'interface shutdown':'aktif'])}
-    else if(d.type==='switch'){ipRows.push([d.name,'Switch',d.svi.ip||'-',d.svi.mask||'-',d.gw||'-']);const vs=Object.keys(d.vlans).filter(k=>k!=='1');for(const v of vs){const ps=Object.keys(d.ifaces).filter(k=>d.ifaces[k].mode==='access'&&d.ifaces[k].vlan===+v).map(short);ipRows.push([d.name+' VLAN '+v,'VLAN',d.vlans[v],'-',ps.join(', ')||'-'])}}
+    else if(d.type==='router'){const fs=Object.keys(d.ifaces).filter(k=>d.ifaces[k].ip);if(!fs.length)ipRows.push([d.name,'Router','-','-','-']);for(const k of fs)ipRows.push([d.name+' '+short(k),'Router',d.ifaces[k].ip,d.ifaces[k].mask,d.ifaces[k].shut?'interface shutdown':'aktif']);for(const k of Object.keys(d.subs||{})){const q=d.subs[k];ipRows.push([d.name+' '+short(k),'Subinterface',q.ip||'-',q.mask||'-','dot1q '+q.vlan+(q.shut?', shutdown':'')])}if(d.rip&&d.rip.on)ipRows.push([d.name,'RIP','versi '+d.rip.version,'-','network '+(d.rip.networks.join(', ')||'-')+(d.rip.autoSum===false?'; no auto-summary':'')+((d.rip.passive||[]).length?'; passive '+d.rip.passive.map(short).join(', '):'')])}
+    else if(d.type==='switch'){ipRows.push([d.name,'Switch',d.svi.ip||'-',d.svi.mask||'-',d.gw||'-']);const vs=Object.keys(d.vlans).filter(k=>k!=='1');for(const v of vs){const ps=Object.keys(d.ifaces).filter(k=>d.ifaces[k].mode==='access'&&d.ifaces[k].vlan===+v).map(short);ipRows.push([d.name+' VLAN '+v,'VLAN',d.vlans[v],'-',ps.join(', ')||'-'])}for(const k of Object.keys(d.ifaces).filter(k=>d.ifaces[k].mode==='trunk'))ipRows.push([d.name+' '+short(k),'Trunk','native '+(d.ifaces[k].native||1),'-','allowed '+allowedText(d.ifaces[k])])}
     else if(d.type==='ap')ipRows.push([d.name,'Access Point','SSID '+d.ssid,'-','-']);
   }
   pdf.table(['Perangkat','Jenis','IP address / info','Mask','Gateway / keterangan'],ipRows.length?ipRows:[['(kosong)','','','','']],[110,70,120,100,pdf.cw-400],{size:8});
@@ -2603,10 +2964,10 @@ function asesInit(){
 }
 /* ================= MODE GURU: KENDALI PENUH DAN BATASAN MURID ================= */
 const GP_KEY='tjkt-guru-v1',GP_SALT='tjkt-guru-2026';
-const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5,alarmViol:true,pinv:0};
+const GP_DEF={pin:'',sekolah:'SMKN 1 Cikarang Utara',mapel:'Dasar-dasar TJKT',paket:'auto',durasi:90,maxCek:3,reqNIS:false,allow3D:true,allowCLI:true,allowAbort:false,allowRedo:false,allowCopy:true,wajibFS:true,blokirSalin:true,maxViol:3,kelas:'',alarmMenit:5,alarmViol:true,tanggal:'',aturan:'',pinv:0};
 const GP=Object.assign({},GP_DEF);
 let GP_PEND=null,PERAN='',PNAMA='',PINDEF=false;
-function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(k==='pin')continue;else if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);GP.alarmMenit=clamp(+GP.alarmMenit||0,0,30)}
+function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');if(o)for(const k of Object.keys(GP_DEF))if(k==='pin')continue;else if(o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k]}catch(e){}GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,10,300);GP.alarmMenit=clamp(+GP.alarmMenit||0,0,30)}
 function saveGP(){try{localStorage.setItem(GP_KEY,JSON.stringify(GP))}catch(e){}}
 const pinHash=p=>fnv(String(p)+'|'+GP_SALT);
 function applyRole(){
@@ -2669,9 +3030,9 @@ function panelGuru(){
   else if(AS.phase==='done')h+='<p class="small">Selesai: <b>'+esc(AS.id.nama)+'</b> · '+esc(AS.id.kelas)+' · nilai otomatis '+fmt1(AS.result.skor.otomatis)+' / 70.</p><div class="row"><button class="btn sm bad" data-act="asredo">Reset untuk murid berikutnya</button></div>';
   else h+='<p class="small muted">Belum ada asesmen berjalan. Murid mengisi identitas di tab Asesmen.</p>';
   h+='</div>';
-  h+='<div class="card"><h3>Pengaturan asesmen</h3><div class="g2">'+gpFld('sekolah','Sekolah','text','maxlength="60"')+gpFld('mapel','Mata pelajaran','text','maxlength="60"')+'</div><div class="g2"><div class="fld"><label for="gpf-paket">Paket soal</label><select id="gpf-paket" data-ch="gp" data-k="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A: lab komputer'],['B','B: kabel dan nirkabel'],['C','C: dua gedung dan router'],['D','D: VLAN']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+gpFld('durasi','Durasi (menit)','number','min="30" max="180"')+'</div>'+gpFld('maxCek','Jumlah Cek mandiri','number','min="0" max="10"');
-  h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('alarmViol','Bunyikan alarm dan getar saat murid melanggar','Layar murid berkedip merah, ada sirene dan getar setiap pelanggaran dicatat.')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpFld('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number','min="0" max="30"')+'<button class="btn sm" data-act="alarmtest" style="margin-top:6px">Uji alarm (6 detik)</button>'+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
-  h+='<p class="small muted" style="margin:10px 0 0">Selalu berlaku bagi murid: aktivitas latihan, template, diagnosa otomatis, pemuatan proyek, dan pengaturan dikunci saat asesmen berjalan. Paket, durasi, dan batasan hanya berlaku untuk asesmen yang dimulai setelah diubah.</p></div>';
+  h+='<div class="card"><h3>Pengaturan asesmen</h3><div class="g2">'+gpFld('sekolah','Sekolah','text','maxlength="60"')+gpFld('mapel','Mata pelajaran','text','maxlength="60"')+'</div><div class="g2"><div class="fld"><label for="gpf-paket">Paket soal</label><select id="gpf-paket" data-ch="gp" data-k="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A: lab komputer'],['B','B: kabel dan nirkabel'],['C','C: dua gedung dan router'],['D','D: VLAN'],['E','E: VLAN, trunk, router-on-a-stick'],['F','F: routing RIP']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+gpFld('durasi','Durasi (menit)','number','min="10" max="300"')+'</div><div class="g2">'+gpFld('tanggal','Tanggal pelaksanaan','date')+'<div></div></div>'+gpFld('maxCek','Jumlah Cek mandiri','number','min="0" max="10"');
+  h+=gpChk('reqNIS','Wajibkan NIS')+'<h4 style="margin:12px 0 0;font-size:13px">Batasan untuk murid</h4>'+gpChk('allow3D','Boleh memakai tampilan 3D saat asesmen')+gpChk('allowCLI','Boleh memakai CLI router dan switch saat asesmen','Matikan untuk paket tanpa konfigurasi CLI.')+gpChk('allowCopy','Boleh menyalin proyek sebagai teks')+gpChk('wajibFS','Wajib layar penuh (sesi baru)')+gpChk('alarmViol','Bunyikan alarm dan getar saat murid melanggar','Layar murid berkedip merah, ada sirene dan getar setiap pelanggaran dicatat.')+gpChk('blokirSalin','Blokir salin, tempel, klik kanan (sesi baru)')+gpFld('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number','min="0" max="20"')+gpFld('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number','min="0" max="30"')+'<div class="fld"><label for="gpf-aturan">Aturan tambahan dari guru (satu aturan per baris)</label><textarea id="gpf-aturan" rows="3" maxlength="1500" data-in="gp" data-ch="gp" data-k="aturan" placeholder="Contoh: Dilarang membuka HP selama asesmen.">'+esc(GP.aturan)+'</textarea></div>'+'<button class="btn sm" data-act="alarmtest" style="margin-top:6px">Uji alarm (6 detik)</button>'+gpChk('allowAbort','Murid boleh membatalkan asesmen sendiri','Bila mati, pembatalan memerlukan PIN guru.')+gpChk('allowRedo','Murid boleh mengulang setelah selesai','Bila mati, mengulang memerlukan PIN guru.');
+  h+='<p class="small muted" style="margin:10px 0 0">Selalu berlaku bagi murid: aktivitas latihan, template, diagnosa otomatis, pemuatan proyek, dan pengaturan dikunci saat asesmen berjalan. Pengaturan ini untuk asesmen di komputer ini. Untuk sesi berbasis token, durasi, tanggal, dan aturan diatur dari Ruang Pantau dan bisa diubah kapan saja, termasuk saat sesi berjalan.</p></div>';
   h+='<div class="card"><h3>Periksa hasil murid</h3><p class="small muted">Muat berkas JSON dari Google Classroom untuk menghitung ulang skor dan melihat jaringannya.</p><button class="btn sm pri" data-act="asverify">Periksa berkas siswa</button></div>';
   h+='<div class="card"><h3>Komputer lain</h3><p class="small muted">Pengaturan asesmen tersimpan per browser. Untuk sesi baru, pengaturan yang berlaku adalah yang Anda isi saat membuat sesi. Salin ke komputer lain jika ingin sama.</p><div class="row"><button class="btn sm" data-act="gpcopy">Salin pengaturan</button><button class="btn sm" data-act="gpapply">Terapkan pengaturan</button></div></div>';
   h+='<div class="row"><button class="btn bad" data-act="gpexit">Keluar mode guru</button></div>';
@@ -2682,8 +3043,9 @@ PCH.gp=el=>{
   if(el.type==='checkbox')GP[k]=el.checked;
   else if(typeof GP_DEF[k]==='number'){
     const v=parseInt(el.value);if(!(v>=0))return;
-    GP[k]=k==='durasi'?clamp(v,30,180):(k==='maxCek'?clamp(v,0,10):v);
-  }else GP[k]=String(el.value).slice(0,60);
+    GP[k]=k==='durasi'?clamp(v,10,300):(k==='maxCek'?clamp(v,0,10):v);
+  }else if(k==='tanggal')GP[k]=/^\d{4}-\d{2}-\d{2}$/.test(el.value)?el.value:'';
+  else GP[k]=String(el.value).slice(0,k==='aturan'?1500:60);
   saveGP();
   if(k==='allowCopy')applyRole();
 };
@@ -2759,6 +3121,12 @@ function cbtEngine(S,fn,a,now,rid){
     return S.sesi.slice().sort((x,y)=>y.dibuat-x.dibuat).map(s=>Object.assign(sesiRow(s),{jumlah:S.peserta.filter(p=>p.sesi_id===s.id).length}));
   case 'guru_sesi_ubah':{guru();if(!['buka','tutup'].includes(a.p_status))E('status_tidak_valid');
     const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');s.status=a.p_status;return{ok:true}}
+  case 'guru_sesi_atur':{guru();const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');
+    if(!isObj(a.p_data))E('data_tidak_valid');const d=a.p_data,pol=Object.assign({},s.policy);
+    if('durasi' in d){const m=int(d.durasi,0);if(m<10||m>300)E('durasi_tidak_valid');pol.durasi=m}
+    if('tanggal' in d){const t=d.tanggal==null?'':String(d.tanggal);if(t!==''&&!/^\d{4}-\d{2}-\d{2}$/.test(t))E('tanggal_tidak_valid');pol.tanggal=t}
+    if('aturan' in d){pol.aturan=String(d.aturan==null?'':d.aturan).slice(0,1500)}
+    s.policy=pol;return{ok:true,policy:pol}}
   case 'guru_sesi_hapus':{guru();const i=S.sesi.findIndex(x=>x.id===a.p_sesi);if(i<0)E('sesi_tidak_ada');
     S.sesi.splice(i,1);S.peserta=S.peserta.filter(p=>p.sesi_id!==a.p_sesi);return{ok:true}}
   case 'guru_pantau':{guru();const s=S.sesi.find(x=>x.id===a.p_sesi);if(!s)E('sesi_tidak_ada');
@@ -2817,7 +3185,7 @@ function cbtEngine(S,fn,a,now,rid){
     p.state=st;p.terakhir=now;p.terkunci=lock;
     p.status=p.hasil!=null?'selesai':(st.phase==='run'?'mengerjakan':'masuk');
     if(a.p_snap!=null&&String(a.p_snap).length<400000)p.snap=String(a.p_snap);
-    return{server_ms:now,terkunci:lock,tambah_menit:p.tambah_menit,paksa_akhir:p.paksa_akhir,pesan:p.pesan,sesi_status:s.status,terkirim:p.hasil!=null,masuk:p.masuk}}
+    return{server_ms:now,terkunci:lock,tambah_menit:p.tambah_menit,paksa_akhir:p.paksa_akhir,pesan:p.pesan,sesi_status:s.status,terkirim:p.hasil!=null,masuk:p.masuk,durasi:/^\d+$/.test(String(s.policy.durasi))?+s.policy.durasi:null,tanggal:s.policy.tanggal==null?null:String(s.policy.tanggal),aturan:s.policy.aturan==null?null:String(s.policy.aturan)}}
   case 'siswa_kirim':{
     const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
     if(p.secret!==a.p_secret)E('rahasia_salah');
@@ -2948,15 +3316,20 @@ function siswaMasuk(r,ids,token,old){
   ROLE='siswa';
   const same=r.lanjut&&AS.phase!=='idle'&&AS.id.nama===ids.nama&&AS.id.kelas===ids.kelas&&String(AS.id.absen)===String(ids.absen);
   CB.viol=old?+old.viol||0:0;CB.base=old?+old.base||0:0;
+  CB.skew=(r.server_ms||Date.now())-Date.now();SW.masuk=r.masuk||0;SW.resume=!!r.lanjut;
   if(!same){
     CB.events=[];CB.auto=false;CB.lastSnap='';
+    asReset();
     Object.assign(AS.id,{nama:ids.nama,kelas:ids.kelas,absen:ids.absen,nis:ids.nis});
-    PA.asstart();
-    if(AS.err){toast(AS.err,'bad')}
-    AS.start=Date.now()-Math.max(0,(r.server_ms||Date.now())-(r.masuk||Date.now()));saveAses();
+    UI.tab='ases';saveAses();
   }
   saveSW();hideGate();applyRole();startBeat();hardenOn();beat();cbOverlay();
 }
+const _asstart0=PA.asstart;
+PA.asstart=()=>{
+  _asstart0();
+  if(ROLE==='siswa'&&SW&&AS.phase==='run'&&SW.resume){AS.start=Date.now()-Math.max(0,(Date.now()+(CB.skew||0))-(SW.masuk||Date.now()));saveAses();asesTick()}
+};
 let GG_BUSY=false;
 async function gateGuru(){
   const p=((($('#gt-pin')||{}).value)||'').trim();
@@ -2996,7 +3369,11 @@ async function beat(){
 }
 function applyServer(r){
   if(!r||ROLE!=='siswa')return;
-  if(r.tambah_menit!=null){const d=GP.durasi+(+r.tambah_menit||0);if(AS.id.durasi!==d){AS.id.durasi=d;AS.over=false;saveAses();asesTick()}}
+  if(r.server_ms)CB.skew=r.server_ms-Date.now();
+  if(r.durasi!=null&&+r.durasi>=10&&+r.durasi<=300&&GP.durasi!==+r.durasi){GP.durasi=+r.durasi;const e=$('#as-dur');if(e)e.textContent=GP.durasi;if(SW&&SW.policy){SW.policy.durasi=GP.durasi;saveSW()}}
+  if(r.tanggal!=null&&r.tanggal!==GP.tanggal){GP.tanggal=String(r.tanggal);if(AS.phase==='idle')renderPanel()}
+  if(r.aturan!=null&&r.aturan!==GP.aturan){GP.aturan=String(r.aturan);if(AS.phase==='idle')renderPanel()}
+  if(r.tambah_menit!=null){const d=GP.durasi+(+r.tambah_menit||0);if(AS.phase==='run'&&AS.id.durasi!==d){AS.id.durasi=d;AS.over=asesLeft()<0;saveAses();asesTick()}}
   if(r.terkunci)setLocked(true);else if(CB.locked)setLocked(false);
   if(Array.isArray(r.pesan)){const fresh=r.pesan.filter(m=>m.id>SW.lastMsg);if(fresh.length){SW.lastMsg=Math.max(...fresh.map(m=>m.id));saveSW();cbMsg(fresh.map(m=>m.teks).join('\n'))}}
   if(r.paksa_akhir&&AS.phase==='run')PA.asforce();
@@ -3121,7 +3498,7 @@ function monRender(){
   if(MON.err)h+='<div class="mer" role="alert">'+esc(MON.err)+' Data di bawah mungkin tidak terbaru.</div>';
   h+='<div class="mb">';
   h+='<div class="card"><div class="row"><div class="fld" style="flex:1;min-width:180px"><label for="mon-sel">Sesi asesmen</label><select id="mon-sel" data-mo="sel">'+(MON.sesi.length?MON.sesi.map(s=>'<option value="'+s.id+'" '+(s.id===MON.cur?'selected':'')+'>'+esc(s.judul||'(tanpa judul)')+' · '+s.token+' · '+s.jumlah+' peserta</option>').join(''):'<option>Belum ada sesi</option>')+'</select></div><button class="btn sm pri" data-mo="new">+ Sesi baru</button></div>';
-  if(cur)h+='<div class="row" style="margin-top:8px;align-items:center"><span class="muted small">Token siswa</span><b class="tok" id="mon-tok">'+esc(cur.token)+'</b><button class="btn sm" data-mo="copytok">Salin</button><span class="pill '+(cur.status==='buka'?'good':'bad')+'">'+(cur.status==='buka'?'Sesi dibuka':'Sesi ditutup')+'</span><button class="btn sm" data-mo="toggle">'+(cur.status==='buka'?'Tutup sesi':'Buka sesi')+'</button><button class="btn sm bad" data-mo="del">Hapus sesi</button></div>';
+  if(cur)h+='<div class="row" style="margin-top:8px;align-items:center"><span class="muted small">Token siswa</span><b class="tok" id="mon-tok">'+esc(cur.token)+'</b><button class="btn sm" data-mo="copytok">Salin</button><span class="pill '+(cur.status==='buka'?'good':'bad')+'">'+(cur.status==='buka'?'Sesi dibuka':'Sesi ditutup')+'</span><button class="btn sm" data-mo="toggle">'+(cur.status==='buka'?'Tutup sesi':'Buka sesi')+'</button><button class="btn sm bad" data-mo="del">Hapus sesi</button></div><div class="row" style="margin-top:8px;align-items:center"><span class="muted small">Durasi</span><b id="mon-dur">'+(+(cur.policy&&cur.policy.durasi)||'-')+' menit</b><span class="muted small">Tanggal</span><b>'+esc(fmtTglIso(cur.policy&&cur.policy.tanggal)||'belum diatur')+'</b><button class="btn sm pri" data-mo="atur">Atur durasi, tanggal, aturan</button></div>';
   h+='</div>';
   if(cur){
     h+='<div class="stats"><div><b>'+ps.length+'</b><span>Peserta</span></div><div><b>'+cnt.work+'</b><span>Mengerjakan</span></div><div><b>'+cnt.done+'</b><span>Selesai</span></div><div><b style="color:var(--bad)">'+cnt.lock+'</b><span>Terkunci</span></div><div><b style="color:var(--bad)">'+ps.filter(perlu).length+'</b><span>Perlu ditinjau</span></div></div>';
@@ -3139,16 +3516,18 @@ function monRender(){
   const keep=m.querySelector('.mb');const sc=keep?keep.scrollTop:0;
   m.innerHTML=h;const nb=m.querySelector('.mb');if(nb)nb.scrollTop=sc;
 }
+function todayStr(ms){return new Date(ms==null?Date.now()+(CB.skew||0):ms).toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'})}
+function fmtTglIso(s){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');if(!m)return '';return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],12)).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})}
 const genTok=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let t='';const a=new Uint8Array(6);(window.crypto||{getRandomValues:x=>x.forEach((_,i)=>x[i]=Math.random()*256)}).getRandomValues(a);for(const b of a)t+=c[b%c.length];return t};
 function cbConfirm(txt,fn,yes){CB.confirmFn=fn;showDlg(dlgShell('Konfirmasi','<p>'+txt+'</p><div class="row"><button class="btn bad" data-g="cbyes">'+(yes||'Ya, lanjutkan')+'</button><button class="btn" data-g="close">Batal</button></div>'),true)}
 function sesiDialog(){
   const sf=(k,l,t,x)=>'<div class="fld"><label for="sf-'+k+'">'+l+'</label><input id="sf-'+k+'" data-sf="'+k+'" type="'+(t||'text')+'" value="'+esc(x)+'" autocomplete="off"></div>';
   const ck=(k,l)=>'<label class="row" style="margin-top:4px"><input type="checkbox" data-sf="'+k+'" '+(GP[k]?'checked':'')+'> <span class="small">'+l+'</span></label>';
-  showDlg(dlgShell('Sesi asesmen baru','<div class="g2">'+sf('judul','Judul sesi','text','Asesmen Praktik Sumatif Akhir Semester')+'<div class="fld"><label for="sf-token">Token (huruf besar atau angka)</label><div class="row" style="flex-wrap:nowrap"><input id="sf-token" data-sf="token" value="'+genTok()+'" maxlength="10" style="flex:1;min-width:0;font-family:var(--ff-mono)"><button class="btn sm" data-g="gentok">Acak</button></div></div></div><div class="g2"><div class="fld"><label for="sf-paket">Paket soal</label><select id="sf-paket" data-sf="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A'],['B','B'],['C','C'],['D','D']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+sf('durasi','Durasi (menit)','number',GP.durasi)+'</div><div class="g2">'+sf('maxCek','Jumlah Cek mandiri','number',GP.maxCek)+sf('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number',GP.maxViol)+'</div>'+sf('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number',GP.alarmMenit)+sf('kelas','Kelas yang boleh masuk (pisahkan koma, kosongkan = semua)','text',GP.kelas)+ck('reqNIS','Wajibkan NIS')+ck('wajibFS','Wajib layar penuh')+ck('blokirSalin','Blokir salin, tempel, dan klik kanan')+ck('alarmViol','Alarm dan getar saat murid melanggar')+ck('allow3D','Boleh tampilan 3D')+ck('allowCLI','Boleh CLI router dan switch')+'<p class="small" id="sf-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="sesibuat">Buat sesi</button></div>'));
+  showDlg(dlgShell('Sesi asesmen baru','<div class="g2">'+sf('judul','Judul sesi','text','Asesmen Praktik Sumatif Akhir Semester')+'<div class="fld"><label for="sf-token">Token (huruf besar atau angka)</label><div class="row" style="flex-wrap:nowrap"><input id="sf-token" data-sf="token" value="'+genTok()+'" maxlength="10" style="flex:1;min-width:0;font-family:var(--ff-mono)"><button class="btn sm" data-g="gentok">Acak</button></div></div></div><div class="g2"><div class="fld"><label for="sf-paket">Paket soal</label><select id="sf-paket" data-sf="paket">'+[['auto','Otomatis (absen ganjil A, genap B)'],['A','A'],['B','B'],['C','C'],['D','D'],['E','E'],['F','F']].map(o=>'<option value="'+o[0]+'" '+(GP.paket===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'+sf('durasi','Durasi (menit, bisa diubah saat sesi berjalan)','number',GP.durasi)+'</div><div class="g2">'+sf('tanggal','Tanggal pelaksanaan','date',GP.tanggal||todayStr())+'<div></div></div><div class="fld"><label for="sf-aturan">Aturan tambahan (satu per baris, opsional)</label><textarea id="sf-aturan" data-sf="aturan" rows="3" maxlength="1500"></textarea></div><div class="g2">'+sf('maxCek','Jumlah Cek mandiri','number',GP.maxCek)+sf('maxViol','Batas pelanggaran sebelum terkunci (0 = mati)','number',GP.maxViol)+'</div>'+sf('alarmMenit','Alarm dan efek api sebelum waktu habis (menit, 0 = mati)','number',GP.alarmMenit)+sf('kelas','Kelas yang boleh masuk (pisahkan koma, kosongkan = semua)','text',GP.kelas)+ck('reqNIS','Wajibkan NIS')+ck('wajibFS','Wajib layar penuh')+ck('blokirSalin','Blokir salin, tempel, dan klik kanan')+ck('alarmViol','Alarm dan getar saat murid melanggar')+ck('allow3D','Boleh tampilan 3D')+ck('allowCLI','Boleh CLI router dan switch')+'<p class="small" id="sf-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="sesibuat">Buat sesi</button></div>'));
 }
 async function sesiBuat(){
   const v=k=>{const e=$('[data-sf="'+k+'"]');return e?(e.type==='checkbox'?e.checked:e.value):''};
-  const pol={sekolah:GP.sekolah,mapel:GP.mapel,paket:v('paket'),durasi:clamp(parseInt(v('durasi'))||90,30,180),maxCek:clamp(parseInt(v('maxCek')),0,10)||0,maxViol:clamp(parseInt(v('maxViol')),0,20)||0,alarmMenit:clamp(parseInt(v('alarmMenit')),0,30)||0,kelas:String(v('kelas')).trim().slice(0,100),reqNIS:v('reqNIS'),wajibFS:v('wajibFS'),blokirSalin:v('blokirSalin'),alarmViol:v('alarmViol'),allow3D:v('allow3D'),allowCLI:v('allowCLI'),allowAbort:false,allowRedo:false,allowCopy:false};
+  const pol={sekolah:GP.sekolah,mapel:GP.mapel,paket:v('paket'),durasi:clamp(parseInt(v('durasi'))||90,10,300),tanggal:/^\d{4}-\d{2}-\d{2}$/.test(v('tanggal'))?v('tanggal'):'',aturan:String(v('aturan')).slice(0,1500),maxCek:clamp(parseInt(v('maxCek')),0,10)||0,maxViol:clamp(parseInt(v('maxViol')),0,20)||0,alarmMenit:clamp(parseInt(v('alarmMenit')),0,30)||0,kelas:String(v('kelas')).trim().slice(0,100),reqNIS:v('reqNIS'),wajibFS:v('wajibFS'),blokirSalin:v('blokirSalin'),alarmViol:v('alarmViol'),allow3D:v('allow3D'),allowCLI:v('allowCLI'),allowAbort:false,allowRedo:false,allowCopy:false};
   const e=$('#sf-err');
   try{
     const s=await rpc('guru_sesi_buat',{p_key:gk(),p_token:String(v('token')).toUpperCase(),p_judul:String(v('judul')).slice(0,80),p_policy:pol});
@@ -3322,6 +3701,8 @@ function cbBind(){
     else if(t==='copytok'){const c=(MON.sesi.find(s=>s.id===MON.cur)||{}).token;try{navigator.clipboard.writeText(c).then(()=>toast('Token disalin.','good'),()=>toast('Salin manual: '+c,'warn'))}catch(x){toast('Salin manual: '+c,'warn')}}
     else if(t==='toggle'){const c=MON.sesi.find(s=>s.id===MON.cur);rpc('guru_sesi_ubah',{p_key:gk(),p_sesi:MON.cur,p_status:c.status==='buka'?'tutup':'buka'}).then(()=>monLoadSesi()).then(monPoll).catch(x=>toast(errMsg(x.message),'bad'))}
     else if(t==='del')cbConfirm('Hapus sesi ini beserta semua data pesertanya? Tindakan ini tidak bisa dibatalkan.',()=>rpc('guru_sesi_hapus',{p_key:gk(),p_sesi:MON.cur}).then(()=>monLoadSesi()).then(monPoll).catch(x=>toast(errMsg(x.message),'bad')),'Ya, hapus');
+    else if(t==='atur'){const c=MON.sesi.find(s=>s.id===MON.cur);if(!c)return;const pl=c.policy||{};
+      showDlg(dlgShell('Atur sesi','<p class="small muted">Perubahan durasi langsung berlaku untuk semua siswa yang sedang mengerjakan, juga yang belum mulai. Waktu tambahan per siswa tetap ditambahkan di atasnya.</p><div class="fld"><label for="at-dur">Durasi (menit, 10 sampai 300)</label><input id="at-dur" type="number" min="10" max="300" value="'+(+pl.durasi||90)+'"></div><div class="row" style="margin:4px 0 8px"><button class="btn sm" data-g="atdur" data-d="-10">-10</button><button class="btn sm" data-g="atdur" data-d="10">+10</button><button class="btn sm" data-g="atdur" data-d="30">+30</button></div><div class="fld"><label for="at-tgl">Tanggal pelaksanaan</label><input id="at-tgl" type="date" value="'+esc(pl.tanggal||'')+'"></div><div class="fld"><label for="at-atr">Aturan tambahan (satu per baris)</label><textarea id="at-atr" rows="4" maxlength="1500">'+esc(pl.aturan||'')+'</textarea></div><p class="small" id="at-err" style="color:var(--bad);margin:6px 0" role="alert"></p><div class="row"><button class="btn pri" data-g="atsimpan">Simpan</button><button class="btn" data-g="close">Batal</button></div>'))}
     else if(t==='a-kunci')monAksi('kunci');else if(t==='a-buka')monAksi('buka');else if(t==='a-tambah')monAksi('tambah',null,{menit:10});
     else if(t==='a-pesan'){MON.msgTo=null;showDlg(dlgShell('Pesan ke semua peserta','<div class="fld"><label for="mon-msg">Pesan</label><textarea id="mon-msg" rows="4" maxlength="300"></textarea></div><div class="row" style="margin-top:8px"><button class="btn pri" data-g="monsend">Kirim</button></div>'),true)}
     else if(t==='a-akhiri')cbConfirm('Akhiri asesmen semua peserta yang masih mengerjakan? Hasil mereka dikirim otomatis.',()=>monAksi('akhiri'),'Ya, akhiri semua');
@@ -3331,6 +3712,12 @@ function cbBind(){
     const g=e.target.closest('[data-g]');if(!g)return;const t=g.dataset.g;
     if(t==='gentok'){const i=$('#sf-token');if(i)i.value=genTok()}
     else if(t==='sesibuat')sesiBuat();
+    else if(t==='atdur'){const i=$('#at-dur');if(i)i.value=clamp((parseInt(i.value)||90)+parseInt(g.dataset.d),10,300)}
+    else if(t==='atsimpan'){
+      const d=parseInt($('#at-dur').value),tg=$('#at-tgl').value,er=$('#at-err');
+      if(!(d>=10&&d<=300)){er.textContent='Durasi harus 10 sampai 300 menit.';return}
+      rpc('guru_sesi_atur',{p_key:gk(),p_sesi:MON.cur,p_data:{durasi:d,tanggal:tg,aturan:$('#at-atr').value}}).then(()=>{closeDlg();toast('Sesi diperbarui. Siswa menerima perubahan dalam beberapa detik.','good');return monLoadSesi()}).then(()=>{MON.cur=MON.cur;monRender();return monPoll()}).catch(x=>{er.textContent=errMsg(x.message)})
+    }
     else if(t==='monsend'){const txt=(($('#mon-msg')||{}).value||'').trim();if(!txt){toast('Tulis pesan dulu.','warn');return}closeDlg();monAksi('pesan',MON.msgTo,{teks:txt})}
     else if(t==='cbyes'){const f=CB.confirmFn;CB.confirmFn=null;closeDlg();if(f)f()}
   });
