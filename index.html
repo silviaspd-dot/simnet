@@ -3273,10 +3273,31 @@ function applyPolicy(p){for(const k of POLKEYS())GP[k]=GP_DEF[k];if(!p||typeof p
 function showGate(note){
   ROLE='tamu';SW=null;stopBeat();hardenOff();CB.locked=false;CB.needFS=false;cbOverlay();
   if(document.fullscreenElement)try{document.exitFullscreen()}catch(e){}
-  $('#gate').hidden=false;document.body.classList.add('gate-on');
+  CB.tata=false;$('#gate').style.alignItems='';$('#gate').hidden=false;document.body.classList.add('gate-on');
   renderGate(CB.gateTab,note||'');applyRole();
 }
-function hideGate(){$('#gate').hidden=true;document.body.classList.remove('gate-on');requestAnimationFrame(()=>{try{fitView()}catch(e){}})}
+function renderTata(msg){
+  const pr=$('#gt-rules');if(pr)AS.rules=pr.checked;
+  const g=$('#gate'),s=SW||{ids:{}},L=asesAturan();
+  CB.tata=true;g.hidden=false;document.body.classList.add('gate-on');g.style.alignItems='flex-start';
+  g.innerHTML='<div class="gcard" style="width:min(560px,100%);margin:auto"><div class="gh"><b style="font:700 20px var(--ff-head)">SIMNET</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button class="on" style="cursor:default" tabindex="-1">Tata Tertib</button></div><div class="gb">'
+   +'<div class="small"><b>'+esc(s.ids.nama||'')+'</b> · '+esc(s.ids.kelas||'')+' · absen '+esc(s.ids.absen||'')+(s.judul?'<br><span class="muted">'+esc(s.judul)+'</span>':'')+'</div>'
+   +(GP.tanggal?'<div class="small">Tanggal pelaksanaan: <b>'+esc(asTglFmt(GP.tanggal))+'</b></div>':'')
+   +'<p class="small muted" style="margin:0">Baca seluruhnya sebelum mulai. Waktu baru berjalan setelah Anda menekan Mulai Asesmen.</p>'
+   +'<ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px">'+L.map(x=>'<li>'+x+'</li>').join('')+'</ol>'
+   +'<label class="row" style="align-items:flex-start"><input type="checkbox" id="gt-rules" '+(AS.rules?'checked':'')+'> <span class="small">Saya sudah membaca dan menyetujui tata tertib asesmen ini.</span></label>'
+   +'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p>'
+   +'<button class="btn pri" data-gate="tata" id="gt-go">Mulai Asesmen</button><button class="btn" data-gate="tataback">Kembali ke halaman masuk</button></div></div>';
+}
+function tataMulai(){
+  const cb=$('#gt-rules');AS.rules=!!(cb&&cb.checked);
+  if(GP.wajibFS!==false&&!document.fullscreenElement&&document.documentElement.requestFullscreen)try{document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
+  PA.asstart();
+  if(AS.phase!=='run'){gerr(AS.err||'Belum bisa dimulai.');return}
+  CB.tata=false;$('#gate').style.alignItems='';hideGate();applyRole();hardenOn();cbLog('Tata tertib disetujui, asesmen dimulai',false);beat();cbOverlay();
+}
+function tataKembali(){asReset();saveAses();showGate('Anda keluar dari sesi. Masukkan data untuk masuk kembali.')}
+function hideGate(){CB.tata=false;$('#gate').style.alignItems='';$('#gate').hidden=true;document.body.classList.remove('gate-on');requestAnimationFrame(()=>{try{fitView()}catch(e){}})}
 function renderGate(tab,msg){
   CB.gateTab=tab;
   let f;
@@ -3327,7 +3348,9 @@ function siswaMasuk(r,ids,token,old){
     if(elapsed>0)AS.start=Date.now()-elapsed;
     AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;saveAses();
   }
-  saveSW();hideGate();applyRole();startBeat();hardenOn();beat();cbOverlay();
+  saveSW();applyRole();startBeat();
+  if(AS.phase==='idle'){AS.rules=false;renderTata();beat();return}
+  hideGate();hardenOn();beat();cbOverlay();
 }
 const _asstart0=PA.asstart;
 PA.asstart=()=>{
@@ -3375,8 +3398,8 @@ function applyServer(r){
   if(!r||ROLE!=='siswa')return;
   if(r.server_ms)CB.skew=r.server_ms-Date.now();
   if(r.durasi!=null&&+r.durasi>=10&&+r.durasi<=300&&GP.durasi!==+r.durasi){GP.durasi=+r.durasi;const e=$('#as-dur');if(e)e.textContent=GP.durasi;if(SW&&SW.policy){SW.policy.durasi=GP.durasi;saveSW()}}
-  if(r.tanggal!=null&&r.tanggal!==GP.tanggal){GP.tanggal=String(r.tanggal);if(AS.phase==='idle')renderPanel()}
-  if(r.aturan!=null&&r.aturan!==GP.aturan){GP.aturan=String(r.aturan);if(AS.phase==='idle')renderPanel()}
+  if(r.tanggal!=null&&r.tanggal!==GP.tanggal){GP.tanggal=String(r.tanggal);if(AS.phase==='idle')CB.tata?renderTata():renderPanel()}
+  if(r.aturan!=null&&r.aturan!==GP.aturan){GP.aturan=String(r.aturan);if(AS.phase==='idle')CB.tata?renderTata():renderPanel()}
   if(r.tambah_menit!=null){const d=GP.durasi+(+r.tambah_menit||0);if(AS.phase==='run'&&AS.id.durasi!==d){AS.id.durasi=d;AS.over=asesLeft()<0;saveAses();asesTick()}}
   if(r.terkunci)setLocked(true);else if(CB.locked)setLocked(false);
   if(Array.isArray(r.pesan)){const fresh=r.pesan.filter(m=>m.id>SW.lastMsg);if(fresh.length){SW.lastMsg=Math.max(...fresh.map(m=>m.id));saveSW();cbMsg(fresh.map(m=>m.teks).join('\n'))}}
@@ -3668,9 +3691,9 @@ PA.monopen=monOpen;
 function cbBind(){
   $('#gate').addEventListener('click',e=>{
     const t=e.target.closest('[data-gt]');if(t){renderGate(t.dataset.gt,'');return}
-    const g=e.target.closest('[data-gate]');if(g){g.dataset.gate==='siswa'?gateSiswa():gateGuru()}
+    const g=e.target.closest('[data-gate]');if(g){const k=g.dataset.gate;k==='siswa'?gateSiswa():k==='guru'?gateGuru():k==='tata'?tataMulai():tataKembali()}
   });
-  $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
+  $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();if(CB.tata)return tataMulai();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
   $('#gate').addEventListener('input',e=>{if(e.target.id==='gt-token'||e.target.id==='gt-kelas')e.target.value=e.target.value.toUpperCase()});
   $('#dlg').addEventListener('click',async e=>{
     const t=e.target.closest('[data-g]');if(!t)return;
@@ -3735,7 +3758,9 @@ function cbtInit(){
     SW={pid:old.pid,secret:old.secret,sesi:old.sesi,judul:old.judul,token:old.token,ids:old.ids,policy:old.policy||{},lastMsg:old.lastMsg||0,terkirim:!!old.terkirim};
     applyPolicy(old.policy);CB.viol=+old.viol||0;CB.base=+old.base||0;
     if(AS.phase==='idle')Object.assign(AS.id,{sekolah:GP.sekolah,mapel:GP.mapel,paket:GP.paket,durasi:GP.durasi,tanggal:GP.tanggal||''});
-    ROLE='siswa';hideGate();applyRole();startBeat();if(AS.phase==='run')hardenOn();cbLog('Halaman dimuat ulang',false);beat();cbOverlay();
+    ROLE='siswa';applyRole();startBeat();
+    if(AS.phase==='idle'){AS.rules=false;renderTata();beat();return}
+    hideGate();if(AS.phase==='run')hardenOn();cbLog('Halaman dimuat ulang',false);beat();cbOverlay();
   }else showGate()
 }
 
@@ -4066,5 +4091,3 @@ function boot(){
 }
 boot();
 </script>
-</body>
-</html>
