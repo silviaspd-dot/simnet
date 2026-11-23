@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>
-/* Layout: lab bench. Palet kiri, kanvas topologi tengah, panel belajar kanan. Aksen kobalt hanya untuk aksi; hijau/merah/kuning khusus status link. */
+/* Layout: lab bench. Panel kiri, kanvas topologi tengah, panel belajar kanan. Aksen kobalt hanya untuk aksi; hijau/merah/kuning khusus status link. */
 :root{
   --bg:#e9edf3;--surface:#ffffff;--surface2:#f3f5f9;--ink:#13202f;--muted:#566578;--line:#ccd4df;
   --accent:#2457d6;--accent-ink:#ffffff;--accent-soft:#dde7fb;
@@ -1408,7 +1408,7 @@ function updateHint(){
     const l=S.links.find(x=>x.id===UI.sel.id);
     if(l)h='Kabel dipilih: <b>'+CABLES[l.cable].label+'</b> <button class="btn sm" data-h="plug">'+(l.plugged===false?'Colok kembali':'Cabut')+'</button> <button class="btn sm bad" data-h="rm">Hapus kabel</button>';
   }
-  if(!h)h=S.devices.length?'Geser perangkat untuk memindah. Ketuk dua kali perangkat untuk membuka konfigurasi, port, dan CLI.':'Mulai: klik perangkat di palet kiri untuk menambahkannya ke kanvas, atau pilih sebuah aktivitas di panel kanan.';
+  if(!h)h=S.devices.length?'Geser perangkat untuk memindah. Ketuk dua kali perangkat untuk membuka konfigurasi, port, dan CLI.':'Mulai: klik perangkat di panel kiri untuk menambahkannya ke kanvas, atau pilih sebuah aktivitas di panel kanan.';
   el.innerHTML=h;
 }
 function select(kind,id){UI.sel=id?{kind,id}:null;render2D();updateHint();if(UI.tab==='info')renderPanel();if(UI.view==='3d'&&(typeof V3!=='undefined'&&V3.ok))sync3D()}
@@ -2018,21 +2018,21 @@ const ACTS=[
 {id:'a1',lv:0,title:'Hubungkan dua PC',goal:'Buat jaringan terkecil: dua PC yang saling ping.',concept:'Kabel crossover untuk perangkat sejenis. Alamat IP harus satu subnet.',
  starter:{dev:[{k:'a',t:'pc',n:'PC0',x:100,y:150},{k:'b',t:'pc',n:'PC1',x:400,y:150}]},
  items:[
- {t:'Letakkan 2 PC di kanvas',how:'Klik ikon PC di palet kiri dua kali, atau seret ikonnya ke kanvas.',tip:'Tombol Siapkan perangkat akan meletakkannya untuk Anda.',rec:{devices:['pc']},ok:()=>byT('pc').length>=2},
- {t:'Sambungkan kedua PC dengan kabel Crossover',how:'Pilih Crossover di palet, klik PC pertama lalu pilih FastEthernet0, kemudian klik PC kedua dan pilih FastEthernet0.',tip:'PC dan PC itu sejenis, jadi butuh Crossover. Lampu link di kedua ujung harus hijau.',rec:{cables:['cross']},ok:()=>S.links.some(l=>l.cable==='cross'&&linkUp(l)&&dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='pc')},
+ {t:'Letakkan 2 PC di kanvas',how:'Klik ikon PC di panel kiri dua kali, atau seret ikonnya ke kanvas.',tip:'Tombol Siapkan perangkat akan meletakkannya untuk Anda.',rec:{devices:['pc']},ok:()=>byT('pc').length>=2},
+ {t:'Sambungkan kedua PC dengan kabel Crossover',how:'Pilih Crossover di panel, klik PC pertama lalu pilih FastEthernet0, kemudian klik PC kedua dan pilih FastEthernet0.',tip:'PC dan PC itu sejenis, jadi butuh Crossover. Lampu link di kedua ujung harus hijau.',rec:{cables:['cross']},ok:()=>S.links.some(l=>l.cable==='cross'&&linkUp(l)&&dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='pc')},
  {t:'Beri IP 192.168.1.10 dan 192.168.1.11, mask 255.255.255.0',how:'Ketuk dua kali PC, buka tab Konfigurasi, isi IP address dan Subnet mask. Gateway boleh kosong.',tip:'Tiga angka pertama kedua IP harus sama (satu subnet), angka terakhir harus berbeda.',ok:()=>sameSubnetAll(byT('pc').filter(ipOK).slice(0,2))&&byT('pc').filter(ipOK).length>=2},
  {t:'Uji koneksi dengan ping',how:'Pakai alat Kirim PDU: klik PC pertama lalu PC kedua. Atau buka Desktop, Command Prompt, ketik ping 192.168.1.11.',tip:'Jika gagal, periksa lampu link dan pastikan kedua IP sudah tersimpan.',ok:()=>{const p=byT('pc');return p.length>=2&&canPing(p[0].id,p[1].id)&&P.cur.pings>0}}]},
 {id:'a2',lv:0,title:'Satu LAN dengan switch',goal:'Hubungkan tiga PC lewat switch dan buktikan semuanya saling terjangkau.',concept:'Switch menghubungkan perangkat dalam satu jaringan lokal. PC ke switch memakai kabel straight-through.',
  starter:{dev:[{k:'s',t:'switch',n:'Switch0',x:225,y:60},{k:'a',t:'pc',n:'PC0',x:50,y:230},{k:'b',t:'pc',n:'PC1',x:225,y:230},{k:'c',t:'pc',n:'PC2',x:400,y:230}]},
  items:[
- {t:'Letakkan 1 switch dan 3 PC',how:'Klik Switch sekali, lalu PC tiga kali di palet kiri.',tip:'Gunakan Siapkan perangkat jika ingin langsung mulai dari kabel.',rec:{devices:['switch','pc']},ok:()=>byT('switch').length>=1&&byT('pc').length>=3},
+ {t:'Letakkan 1 switch dan 3 PC',how:'Klik Switch sekali, lalu PC tiga kali di panel kiri.',tip:'Gunakan Siapkan perangkat jika ingin langsung mulai dari kabel.',rec:{devices:['switch','pc']},ok:()=>byT('switch').length>=1&&byT('pc').length>=3},
  {t:'Sambungkan tiap PC ke switch dengan Straight-through',how:'Pilih Straight-through, klik PC, pilih FastEthernet0, klik Switch, pilih port FastEthernet0/1. Ulangi untuk PC lain (port 2 dan 3).',tip:'PC dan switch berbeda jenis, jadi pakai Straight-through. Tiga lampu hijau tanda sukses.',rec:{cables:['straight']},ok:()=>S.links.filter(l=>linkUp(l)&&l.cable==='straight'&&((dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='switch')||(dev(l.b.dev).type==='pc'&&dev(l.a.dev).type==='switch'))).length>=3},
  {t:'Beri tiga PC IP satu subnet (mis. 192.168.1.10, .11, .12 / 255.255.255.0)',how:'Buka tiap PC, tab Konfigurasi, isi IP dan mask. IP tidak boleh sama.',tip:'Dua PC dengan IP yang sama membuat konflik. Ubah angka terakhir.',ok:()=>sameSubnetAll(byT('pc').filter(ipOK))&&byT('pc').filter(ipOK).length>=3},
  {t:'Ping dari satu PC ke PC lain berhasil',how:'Kirim PDU dari PC0 ke PC2, atau ping dari Command Prompt.',tip:'Jika gagal, lihat tab Simulasi untuk melihat di langkah mana paket berhenti.',ok:()=>{const p=byT('pc');return p.length>=3&&p.some(a=>p.some(b=>a!==b&&canPing(a.id,b.id)))&&P.cur.pings>0}}]},
 {id:'a3',lv:1,title:'Atur switch lewat kabel console',goal:'Hubungkan PC ke port Console switch, ganti hostname, dan beri IP manajemen.',concept:'Kabel console (rollover) dipakai untuk konfigurasi awal tanpa jaringan.',
  starter:{dev:[{k:'p',t:'pc',n:'PC0',x:100,y:150},{k:'s',t:'switch',n:'Switch0',x:380,y:150}]},
  items:[
- {t:'Letakkan 1 PC dan 1 switch',how:'Klik PC dan Switch di palet.',tip:'Gunakan Siapkan perangkat.',rec:{devices:['pc','switch']},ok:()=>byT('pc').length>=1&&byT('switch').length>=1},
+ {t:'Letakkan 1 PC dan 1 switch',how:'Klik PC dan Switch di panel.',tip:'Gunakan Siapkan perangkat.',rec:{devices:['pc','switch']},ok:()=>byT('pc').length>=1&&byT('switch').length>=1},
  {t:'Pasang kabel Console dari RS232 PC ke Console switch',how:'Pilih Console, klik PC dan pilih RS232, klik switch dan pilih Console.',tip:'Kabel console hanya cocok dengan port RS232 dan Console. Port Ethernet menolaknya.',rec:{cables:['console']},ok:()=>between('pc','switch',l=>l.cable==='console'&&l.plugged!==false)},
  {t:'Buka Desktop, Terminal dan ubah hostname menjadi SW-LAB',how:'Ketuk dua kali PC, tab Desktop, pilih Terminal. Ketik: enable, configure terminal, hostname SW-LAB.',tip:'Prompt akan berubah menjadi SW-LAB(config)#.',ok:()=>byT('switch').some(d=>d.name==='SW-LAB')},
  {t:'Beri interface vlan 1 alamat 192.168.1.2/24 dan nyalakan',how:'Di terminal: interface vlan 1, ip address 192.168.1.2 255.255.255.0, no shutdown, lalu end.',tip:'Switch bekerja di Layer 2, jadi alamat IP dipasang di interface VLAN 1 (SVI).',ok:()=>byT('switch').some(d=>ip2n(d.svi.ip)!==null&&maskOK(d.svi.mask)&&!d.svi.shut)}]},
@@ -2084,7 +2084,7 @@ const ACTS=[
  {t:'PC0 berhasil ping PC3',how:'Kirim PDU dari PC0 ke PC3.',tip:'Jika masih gagal, buka tab Simulasi untuk melihat langkah yang gagal.',ok:()=>{const a=refD('p0'),b=refD('p3');return !!a&&!!b&&canPing(a.id,b.id)&&P.cur.pings>0}}]},
 {id:'a10',lv:2,title:'Rancang jaringan lab komputer',goal:'Rancang sendiri jaringan lab: satu router, dua switch, enam PC, dan satu server. Semua PC harus bisa mengakses server.',concept:'Mendesain topologi, rencana IP, dan konfigurasi dari nol tanpa langkah rinci.',
  items:[
- {t:'Perangkat: 1 router, 2 switch, 6 PC, 1 server',how:'Tambahkan dari palet.',tip:'Hitung jumlah tiap perangkat di kanvas.',rec:{devices:['router','switch','pc','server']},ok:()=>byT('router').length>=1&&byT('switch').length>=2&&byT('pc').length>=6&&byT('server').length>=1},
+ {t:'Perangkat: 1 router, 2 switch, 6 PC, 1 server',how:'Tambahkan dari panel.',tip:'Hitung jumlah tiap perangkat di kanvas.',rec:{devices:['router','switch','pc','server']},ok:()=>byT('router').length>=1&&byT('switch').length>=2&&byT('pc').length>=6&&byT('server').length>=1},
  {t:'Semua kabel terpasang dan semua link hijau',how:'PC dan server ke switch, switch ke router. Straight-through.',tip:'Link router hijau setelah interface dinyalakan.',ok:()=>S.links.length>=9&&allUp()&&countBetween('router','switch')>=1},
  {t:'Semua PC dan server punya IP, mask, dan gateway yang benar',how:'Rancang rencana IP dulu (tab Alur kerja). Gunakan satu atau dua subnet.',tip:'Gateway diisi bila tujuan berada di subnet lain.',ok:()=>hostsAll().length>=7&&hostsAll().every(h=>ipOK(h)&&(gwMatches(h)||ip2n(h.host.gw)===null))},
  {t:'Setiap PC berhasil ping server',how:'Kirim PDU dari tiap PC ke server.',tip:'Gunakan Diagnosa otomatis di tab Alur kerja untuk mencari masalahnya.',ok:()=>{const v=byT('server')[0];const p=byT('pc');return !!v&&p.length>=6&&p.every(x=>canPing(x.id,v.id))&&P.cur.pings>0}}]},
@@ -2247,8 +2247,8 @@ function flowSteps(){
   const conf=hs.length>0&&hs.every(ipOK)&&rs.every(r=>ifUpWithIp(r).length>0);
   return[
    {t:'Rancang',d:'Tentukan tujuan jaringan, daftar perangkat, dan rencana IP (subnet, gateway). Gambar topologi di kertas atau pada kanvas ini.',tool:'Tabel alamat IP di bawah dan kalkulator subnet di tab Info.',ok:n>0},
-   {t:'Pasang perangkat',d:'Letakkan PC, server, switch, router, dan access point sesuai rancangan. Beri nama yang jelas.',tool:'Palet perangkat di kiri. Ubah nama lewat tab Konfigurasi.',ok:n>=2},
-   {t:'Pasang kabel',d:'Pilih jenis kabel sesuai perangkat dan port. Pastikan semua lampu link hijau.',tool:'Palet kabel. Cabut atau colok kembali lewat tab Fisik.',ok:linked&&allUp()},
+   {t:'Pasang perangkat',d:'Letakkan PC, server, switch, router, dan access point sesuai rancangan. Beri nama yang jelas.',tool:'Panel perangkat di kiri. Ubah nama lewat tab Konfigurasi.',ok:n>=2},
+   {t:'Pasang kabel',d:'Pilih jenis kabel sesuai perangkat dan port. Pastikan semua lampu link hijau.',tool:'Panel kabel. Cabut atau colok kembali lewat tab Fisik.',ok:linked&&allUp()},
    {t:'Konfigurasi',d:'Isi IP, mask, gateway. Nyalakan interface router, buat VLAN dan rute bila perlu.',tool:'Tab Konfigurasi dan CLI pada tiap perangkat.',ok:conf},
    {t:'Uji',d:'Ping dari dekat ke jauh: gateway dulu, lalu perangkat di subnet lain. Pakai tracert untuk melihat jalur.',tool:'Kirim PDU atau Command Prompt. Penjelasan ada di tab Simulasi.',ok:!!UI.pinged},
    {t:'Dokumentasi dan perbaikan',d:'Simpan proyek, catat rencana IP, dan perbaiki masalah yang ditemukan diagnosa.',tool:'Tombol Salin proyek di atas. Diagnosa otomatis di bawah.',ok:!!UI.exported}
