@@ -256,6 +256,7 @@ table.mt{min-width:860px}table.mt td.act{white-space:nowrap}table.mt .btn.sm{min
       <button class="btn" id="b-role" title="Mode guru (PIN)">🔑 <span class="lb">Guru</span></button>
       <button class="btn" id="b-undo" title="Urungkan (Ctrl+Z)">↶ <span class="lb">Urungkan</span></button>
       <button class="btn" id="b-redo" title="Ulangi (Ctrl+Y)">↷ <span class="lb">Ulangi</span></button>
+      <button class="btn" id="b-save" title="Simpan proyek ke berkas, dan ekspor untuk Cisco Packet Tracer" hidden>💾 <span class="lb">Simpan / Packet Tracer</span></button>
       <button class="btn" id="b-copy" title="Salin proyek sebagai teks JSON">⧉ <span class="lb">Salin proyek</span></button>
       <button class="btn" id="b-import" title="Muat proyek dari teks JSON">⇪ <span class="lb">Muat</span></button>
       <button class="btn" id="b-set" title="Pengaturan">⚙ <span class="lb">Pengaturan</span></button>
@@ -1266,7 +1267,7 @@ function pushUndo(){RT.undo.push(serialize());if(RT.undo.length>60)RT.undo.shift
 function undo(){if(!RT.undo.length)return;RT.redo.push(serialize());loadJSON(RT.undo.pop());UI.sel=null;closeDlg();afterChange()}
 function redo(){if(!RT.redo.length)return;RT.undo.push(serialize());loadJSON(RT.redo.pop());UI.sel=null;closeDlg();afterChange()}
 let saveT=0;
-function saveLocal(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('tjkt-net-v1',serialize())}catch(e){}},300)}
+function saveLocal(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem((typeof ROLE!=='undefined'&&ROLE==='belajar')?'tjkt-lesson-v1':'tjkt-net-v1',serialize())}catch(e){}},300)}
 function loadLocal(){try{const t=localStorage.getItem('tjkt-net-v1');if(t){const r=loadJSON(t);return r.ok}}catch(e){}return false}
 function afterChange(){
   RT.arp={};
@@ -1790,6 +1791,7 @@ let lastTab='';
 function renderPanel(){
   const p=$('#panel');if(!p)return;
   if(typeof ROLE!=='undefined'&&ROLE==='siswa'&&UI.tab!=='ases'){UI.tab='ases';markTabs()}
+  if(typeof ROLE!=='undefined'&&ROLE==='belajar'&&(UI.tab==='ases'||UI.tab==='guru')){UI.tab='act';markTabs()}
   const f={act:typeof panelAct==='function'?panelAct:()=>'',flow:typeof panelFlow==='function'?panelFlow:()=>'',info:typeof panelInfo==='function'?panelInfo:()=>'',sim:panelSim,ases:typeof panelAses==='function'?panelAses:()=>'',guru:typeof panelGuru==='function'?panelGuru:()=>''}[UI.tab];
   const st=lastTab===UI.tab?p.scrollTop:0;
   const focused=document.activeElement&&p.contains(document.activeElement)&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
@@ -1832,7 +1834,7 @@ function dlgShell(title,body){return '<div class="dh"><h2>'+title+'</h2><button 
 function openIO(mode){
   if(mode!=='copy'&&typeof asesActive==='function'&&asesActive()){toast('Selama asesmen berjalan, memuat proyek dikunci.','warn');return}
   if(mode==='copy')showDlg(dlgShell('Salin proyek','<p class="small muted">Teks di bawah berisi seluruh topologi dan konfigurasi. Simpan di catatan atau kirim ke guru, lalu muat kembali kapan saja lewat tombol Muat.</p><textarea id="iotxt" rows="12" readonly>'+esc(serialize())+'</textarea><div class="row"><button class="btn pri" data-g="copytxt">Salin ke papan klip</button></div>'),true);
-  else showDlg(dlgShell('Muat proyek','<p class="small muted">Tempel teks proyek (JSON) di sini. Kanvas saat ini akan diganti, tetapi masih bisa diurungkan.</p><textarea id="iotxt" rows="12" placeholder="Tempel teks JSON di sini"></textarea><div class="row"><button class="btn pri" data-g="loadtxt">Muat proyek</button></div>'),true);
+  else showDlg(dlgShell('Muat proyek','<p class="small muted">Tempel teks proyek (JSON) di sini. Kanvas saat ini akan diganti, tetapi masih bisa diurungkan.</p><textarea id="iotxt" rows="12" placeholder="Tempel teks JSON di sini"></textarea><div class="row"><button class="btn pri" data-g="loadtxt">Muat proyek</button><button class="btn" data-g="pjfile">Buka berkas .json...</button><input type="file" id="prj-file" accept=".json,application/json" hidden></div>'),true);
 }
 function openSettings(){
   const lv=(typeof P!=='undefined')?P.level:'auto';
@@ -2978,13 +2980,16 @@ function loadGP(){try{const o=JSON.parse(localStorage.getItem(GP_KEY)||'null');i
 function saveGP(){try{localStorage.setItem(GP_KEY,JSON.stringify(GP))}catch(e){}}
 const pinHash=p=>fnv(String(p)+'|'+GP_SALT);
 function applyRole(){
-  const g=ROLE==='guru',st=ROLE==='siswa';
+  const g=ROLE==='guru',st=ROLE==='siswa',ls=ROLE==='belajar';
   const tg=$('[data-tab="guru"]');if(tg)tg.hidden=!g;
-  for(const id of['b-set','b-import','b-mon']){const e=$('#'+id);if(e)e.hidden=!g}
-  const c=$('#b-copy');if(c)c.hidden=st||!(g||GP.allowCopy);
-  const r=$('#b-role');if(r){r.hidden=!g;r.innerHTML='🔓 <span class="lb">Keluar</span>'}
+  const ta=$('[data-tab="ases"]');if(ta)ta.hidden=ls;
+  for(const id of['b-set','b-import']){const e=$('#'+id);if(e)e.hidden=!(g||ls)}
+  {const e=$('#b-mon');if(e)e.hidden=!g}
+  {const e=$('#b-save');if(e)e.hidden=!(g||ls)}
+  const c=$('#b-copy');if(c)c.hidden=st||!(g||ls||GP.allowCopy);
+  const r=$('#b-role');if(r){r.hidden=!(g||ls);r.innerHTML='🔓 <span class="lb">Keluar</span>'}
   document.body.classList.toggle('role-guru',g);document.body.classList.toggle('role-siswa',st);
-  if(st)UI.tab='ases';else if(!g&&UI.tab==='guru')UI.tab='ases';
+  if(st)UI.tab='ases';else if(ls){if(UI.tab==='ases'||UI.tab==='guru')UI.tab='act'}else if(!g&&UI.tab==='guru')UI.tab='ases';
   markTabs();renderPanel();asesTick();
   const nb=$('#net-badge');if(nb&&!st)nb.hidden=true;
 }
@@ -3010,7 +3015,7 @@ function needGuru(title,fn){
   pinDialog(title,'Tindakan ini hanya boleh dilakukan guru. Minta guru memasukkan PIN.',fn);
 }
 PA.rolebtn=()=>{};
-function exitGuru(){if(typeof monClose==='function')monClose();DBC.gkey='';PERAN='';PNAMA='';PINDEF=false;ADM.list=null;ADM.err='';showGate()}
+function exitGuru(){if(ROLE==='belajar'){exitLesson();return}if(typeof monClose==='function')monClose();DBC.gkey='';PERAN='';PNAMA='';PINDEF=false;ADM.list=null;ADM.err='';showGate()}
 /* ---------- tindakan guru yang dibungkus PIN untuk murid ---------- */
 const _asabort=PA.asabort,_asredo=PA.asredo;
 PA.asabort=()=>{if(ROLE==='guru'||GP.allowAbort)_asabort();else needGuru('Batalkan asesmen',_asabort)};
@@ -3296,13 +3301,19 @@ function renderTata(msg){
    +'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p>'
    +'<button class="btn pri" data-gate="tata" id="gt-go">Mulai Asesmen</button><button class="btn" data-gate="tataback">Kembali ke halaman masuk</button></div></div>';
 }
-function tataMulai(){
+async function tataMulai(){
   const cb=$('#gt-rules');AS.rules=!!(cb&&cb.checked);
-  if(GP.wajibFS!==false&&isSplitOrSmall()){
-    gerr('Perangkat dalam mode layar terbagi (split-screen) atau jendela kecil. Tutup aplikasi lain dan maksimalkan layar terlebih dahulu.');
-    return;
+  if(GP.wajibFS!==false){
+    /* layar penuh dulu (harus dari gestur klik), baru periksa apakah masih terbagi */
+    const de=document.documentElement,req=de.requestFullscreen||de.webkitRequestFullscreen;
+    if(!document.fullscreenElement&&!document.webkitFullscreenElement&&req){try{const p=req.call(de);if(p&&p.catch)p.catch(()=>{})}catch(e){}}
+    await new Promise(r=>setTimeout(r,450));
+    if(isSplitOrSmall()){
+      if(document.fullscreenElement)try{document.exitFullscreen()}catch(e){}
+      gerr('Perangkat dalam mode layar terbagi (split-screen) atau jendela kecil. Tutup aplikasi lain dan maksimalkan layar terlebih dahulu.');
+      return;
+    }
   }
-  if(GP.wajibFS!==false&&!document.fullscreenElement&&document.documentElement.requestFullscreen)try{document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
   PA.asstart();
   if(AS.phase!=='run'){gerr(AS.err||'Belum bisa dimulai.');return}
   CB.tata=false;$('#gate').style.alignItems='';hideGate();applyRole();hardenOn();cbLog('Tata tertib disetujui, asesmen dimulai',false);beat();cbOverlay();
@@ -3315,9 +3326,10 @@ function renderGate(tab,msg){
   const tokStyle='font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase';
   let f;
   if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99" inputmode="numeric" style="'+uStyle+'"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="'+tokStyle+'"></div><button class="btn pri" data-gate="siswa" id="gt-go">Mulai Asesmen</button>';
+  else if(tab==='lesson')f='<p class="small" style="margin:0">Mode <b>Lesson</b> untuk belajar dan berlatih: aktivitas bertahap, alur kerja, papan informasi, simulasi paket, dan <b>merancang proyek jaringan sendiri</b> yang bisa disimpan dan dibuka di Cisco Packet Tracer.</p><ul class="small muted" style="margin:0;padding-left:18px"><li>Tidak perlu token dan tidak dinilai.</li><li>Pekerjaan tersimpan otomatis di browser ini.</li><li>Soal asesmen tidak tampil di sini.</li></ul><button class="btn pri" data-gate="lesson" id="gt-go">Mulai Lesson</button><p class="small muted" style="margin:0">Untuk mengerjakan asesmen, pilih tab Asesmen dan masukkan token dari guru.</p>';
   else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric" style="'+tokStyle+'"></div><button class="btn pri" data-gate="guru" id="gt-go">Login</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
-  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">SIMNET</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
-  const first1=$('#gt-nama')||$('#gt-pin');if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
+  $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">SIMNET</b><div class="small muted">Simulator jaringan: belajar dan asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="lesson" class="'+(tab==='lesson'?'on':'')+'">Lesson</button><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Asesmen</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
+  const first1=tab==='lesson'?null:($('#gt-nama')||$('#gt-pin'));if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
 }
 const gerr=m=>{const e=$('#gt-err');if(e)e.textContent=m};
 async function gateSiswa(){
@@ -3423,14 +3435,19 @@ function setLocked(b){
   CB.locked=b;if(!b){CB.base=CB.viol;saveSW()}
   cbOverlay();
 }
+let LAST_TYPE=0;
+document.addEventListener('focusin',()=>{LAST_TYPE=Date.now()},true);
+document.addEventListener('focusout',()=>{LAST_TYPE=Date.now()},true);
 function isSplitOrSmall(){
   try{
     const sw=window.screen&&window.screen.availWidth||window.innerWidth;
     const sh=window.screen&&window.screen.availHeight||window.innerHeight;
     if(!sw||!sh)return false;
-    const wRatio=window.innerWidth/sw;
-    const hRatio=window.innerHeight/sh;
-    return wRatio<0.85||hRatio<0.80;
+    if(window.innerWidth/sw<0.85)return true;
+    /* tinggi: abaikan saat keyboard layar HP/tablet mungkin terbuka (mengisi kolom teks) */
+    const ae=document.activeElement,typing=!!(ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable));
+    if(typing||Date.now()-LAST_TYPE<2000)return false;
+    return window.innerHeight/sh<0.75;
   }catch(e){return false}
 }
 function cbOverlay(){
@@ -3499,7 +3516,7 @@ function addViol(ket){
 const hVis=()=>{if(document.visibilityState==='hidden')addViol('Berpindah tab atau jendela')};
 let hbT=0;const hBlur=()=>{clearTimeout(hbT);hbT=setTimeout(()=>{if(hdOn()&&!CB.locked&&!document.hasFocus()&&document.visibilityState!=='hidden')addViol('Jendela kehilangan fokus (split-screen / aplikasi lain)')},900)};
 const hFS=()=>{const inFS=!!(document.fullscreenElement||document.webkitFullscreenElement);if(hdOn()&&GP.wajibFS&&!inFS)addViol('Keluar dari layar penuh');cbOverlay()};
-let hrT=0;const hResize=()=>{clearTimeout(hrT);hrT=setTimeout(()=>{if(!hdOn()||CB.locked)return;if(GP.wajibFS&&isSplitOrSmall()){addViol('Menggunakan layar terbagi (split-screen) / mengecilkan jendela');cbOverlay()}else{cbOverlay()}},500)};
+let hrT=0;const hResize=()=>{clearTimeout(hrT);hrT=setTimeout(()=>{if(!hdOn()||CB.locked)return;if(Date.now()-LAST_TYPE<2000){cbOverlay();return}if(GP.wajibFS&&isSplitOrSmall()){addViol('Menggunakan layar terbagi (split-screen) / mengecilkan jendela');cbOverlay()}else{cbOverlay()}},500)};
 const hBlock=e=>{if(hdOn()&&GP.blokirSalin){e.preventDefault();cbLog('Mencoba '+({contextmenu:'klik kanan',copy:'menyalin',cut:'memotong',paste:'menempel',dragstart:'menyeret'}[e.type]||e.type),false)}};
 const hKey=e=>{if(!hdOn())return;const k=e.key;if(k==='F12'||(e.ctrlKey&&e.shiftKey&&/^[ijc]$/i.test(k))||(e.ctrlKey&&/^[usp]$/i.test(k))){e.preventDefault();cbLog('Menekan pintasan '+(e.ctrlKey?'Ctrl+':'')+k,false)}};
 const hUnload=e=>{if(hdOn()){e.preventDefault();e.returnValue=''}};
@@ -3717,13 +3734,161 @@ PA.admreset=b=>cbConfirm('Buat PIN baru untuk guru ini? PIN lama berhenti berlak
 PA.admtog=async b=>{try{await rpc('admin_guru_ubah',{p_key:gk(),p_id:b.dataset.id,p_aktif:b.dataset.on!=='1'});ADM.list=null;admLoad()}catch(e){toast(errMsg(e.message),'bad')}};
 PA.admdel=b=>cbConfirm('Hapus akun guru ini? Akses guru itu langsung berhenti.',async()=>{try{await rpc('admin_guru_hapus',{p_key:gk(),p_id:b.dataset.id});toast('Akun guru dihapus.','good');ADM.list=null;admLoad()}catch(e){toast(errMsg(e.message),'bad')}},'Ya, hapus');
 PA.monopen=monOpen;
+
+
+/* ================= MODE LESSON, SIMPAN PROYEK, EKSPOR PACKET TRACER ================= */
+const LKEY='tjkt-lesson-v1',LMODE='tjkt-mode',PNKEY='tjkt-pname';
+function enterLesson(){
+  if(AS.phase!=='idle')asReset();
+  SW=null;stopBeat();hardenOff();CB.locked=false;CB.viol=0;CB.base=0;CB.tata=false;
+  ROLE='belajar';cbOverlay();
+  try{localStorage.setItem(LMODE,'1')}catch(e){}
+  let ok=false;
+  try{const t=localStorage.getItem(LKEY);if(t){const r=loadJSON(t);ok=r.ok&&S.devices.length>0}}catch(e){}
+  if(!ok)loadTemplate('lan',true);
+  RT.undo=[];RT.redo=[];UI.sel=null;UI.events=[];UI.tab='act';UI.view==='3d'&&setView('2d');
+  const g=$('#gate');if(g){g.style.alignItems='';}
+  hideGate();applyRole();afterChange();
+  requestAnimationFrame(()=>{try{fitView()}catch(e){}});
+}
+function flushLesson(){clearTimeout(saveT);try{localStorage.setItem(LKEY,serialize())}catch(e){}}
+function exitLesson(){
+  flushLesson();
+  try{localStorage.removeItem(LMODE)}catch(e){}
+  closeDlg();showGate('');
+}
+const slug=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+function pjName(){const e=$('#pj-name');let n=e?e.value.trim():'';if(e){try{localStorage.setItem(PNKEY,n)}catch(x){}}return n||'Rancangan_Jaringan'}
+function pjStamp(){return new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}).replace(/-/g,'')}
+/* ---- paket Packet Tracer ---- */
+const PTMODEL={pc:'PC-PT (PC)',laptop:'Laptop-PT',server:'Server-PT',printer:'Printer-PT',switch:'2960 (Switch 2960-24TT)',router:'2911 (Router 2911)',ap:'AccessPoint-PT'};
+const PTCAB={straight:'Copper Straight-Through',cross:'Copper Cross-Over',console:'Console',fiber:'Fiber',wifi:'Nirkabel (tanpa kabel: laptop memilih SSID access point)'};
+function ptPort(d,pn){
+  if(pn==='RS232')return 'RS 232';
+  if(d.type==='ap'){if(pn==='Port0')return 'Port 0';if(pn==='Wireless0')return 'Port 1 (nirkabel)'}
+  return pn;
+}
+const hostName=n=>String(n).replace(/[^A-Za-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'Perangkat';
+function iosCfg(d){
+  const o=['enable','configure terminal','hostname '+hostName(d.name)];
+  const blk=(h,lines)=>{if(lines.length)o.push(h,...lines.map(l=>' '+l),' exit')};
+  if(d.type==='switch'){
+    for(const k of Object.keys(d.vlans).map(Number).sort((a,b)=>a-b))if(k!==1)blk('vlan '+k,['name '+String(d.vlans[k]).replace(/\s+/g,'_')]);
+    for(const p of d.ports){
+      const f=d.ifaces[p.n];if(!f)continue;const L=[];
+      if(f.desc)L.push('description '+String(f.desc).replace(/\s+/g,'_'));
+      if(f.mode==='trunk'){L.push('switchport mode trunk');if((f.native||1)!==1)L.push('switchport trunk native vlan '+f.native);if(f.allowed)L.push('switchport trunk allowed vlan '+allowedText(f))}
+      else if(f.vlan!==1)L.push('switchport mode access','switchport access vlan '+f.vlan);
+      if(f.shut)L.push('shutdown');
+      blk('interface '+p.n,L);
+    }
+    if(ip2n(d.svi.ip)!==null&&maskOK(d.svi.mask))blk('interface vlan 1',['ip address '+d.svi.ip+' '+d.svi.mask,d.svi.shut?'shutdown':'no shutdown']);
+    if(ip2n(d.gw)!==null)o.push('ip default-gateway '+d.gw);
+  }else if(d.type==='router'){
+    for(const p of d.ports){
+      const f=d.ifaces[p.n];if(!f)continue;const L=[];
+      if(f.desc)L.push('description '+String(f.desc).replace(/\s+/g,'_'));
+      if(ip2n(f.ip)!==null&&maskOK(f.mask))L.push('ip address '+f.ip+' '+f.mask);
+      if(!f.shut)L.push('no shutdown');
+      blk('interface '+p.n,L);
+    }
+    for(const k of Object.keys(d.subs||{}).sort()){
+      const q=d.subs[k],L=[];
+      if(q.vlan)L.push('encapsulation dot1Q '+q.vlan);
+      if(ip2n(q.ip)!==null&&maskOK(q.mask))L.push('ip address '+q.ip+' '+q.mask);
+      if(q.shut)L.push('shutdown');
+      blk('interface '+k,L.length?L:['no shutdown']);
+    }
+    if(d.rip&&d.rip.on){
+      const L=['version '+d.rip.version];
+      for(const n of d.rip.networks)L.push('network '+n);
+      for(const n of d.rip.passive||[])L.push('passive-interface '+n);
+      if(d.rip.autoSum===false&&d.rip.version===2)L.push('no auto-summary');
+      blk('router rip',L);
+    }
+    for(const r of d.routes)o.push('ip route '+r.net+' '+r.mask+' '+r.via);
+  }else return null;
+  o.push('end','write memory');
+  return o;
+}
+function ptPackage(name){
+  const D=S.devices,Lk=S.links,t=[];
+  const row=(a,w)=>a.map((x,i)=>String(x==null?'':x).padEnd(w[i])).join('  ').replace(/\s+$/,'');
+  const nm=id=>dev(id).name;
+  t.push('PAKET RANCANGAN JARINGAN UNTUK CISCO PACKET TRACER','Proyek   : '+name,'Dibuat   : '+new Date().toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' (SIMNET)','Isi      : '+D.length+' perangkat, '+Lk.length+' kabel','');
+  t.push('CATATAN','- Berkas .pkt asli tidak dapat dibuat oleh aplikasi web, jadi paket ini berisi semua yang dibutuhkan untuk membangun ulang rancangan di Packet Tracer dalam beberapa menit.','- Packet Tracer menyimpan konfigurasi sebagai ekstensi .pkt. Setelah selesai membangun, simpan dengan File > Save.','');
+  t.push('LANGKAH','1. Buka Packet Tracer, lalu tambahkan perangkat sesuai tabel PERANGKAT (model tertera di kolom Model PT). Ubah nama (Display Name) agar sama.','2. Pasang kabel sesuai tabel KABEL. Pilih jenis kabel dan port persis seperti tertera.','3. Klik PC/Laptop/Server > Desktop > IP Configuration, isi sesuai tabel ALAMAT IP HOST. Server: Services > HTTP.','4. Klik switch/router > tab CLI, tekan Enter, lalu tempel skrip dari bagian SKRIP CLI perangkat itu (satu perangkat satu skrip).','5. Uji dengan ping (Simulation atau Command Prompt) dan periksa lampu link.','');
+  const w1=[Math.max(10,...D.map(d=>d.name.length))+0,30,16];
+  t.push('PERANGKAT',row(['Nama','Model PT','Posisi (x,y)'],w1),row(['----','--------','------------'],w1));
+  for(const d of D)t.push(row([d.name,PTMODEL[d.type],Math.round(d.x)+','+Math.round(d.y)],w1)+(d.power?'':'   (dimatikan)'));
+  t.push('','KABEL');
+  const rows=Lk.map(l=>{const a=dev(l.a.dev),b=dev(l.b.dev);return[a.name,ptPort(a,l.a.port),b.name,ptPort(b,l.b.port),PTCAB[l.cable]+(l.plugged===false?' (dicabut)':'')]});
+  const w2=[0,1,2,3].map(i=>Math.max(8,...rows.map(r=>String(r[i]).length)))
+  t.push(row(['Dari','Port','Ke','Port','Jenis kabel'],w2.concat([0])),row(['----','----','--','----','-----------'],w2.concat([0])));
+  if(!rows.length)t.push('(belum ada kabel)');
+  for(const r of rows)t.push(row(r,w2.concat([0])));
+  const hs=D.filter(d=>isHost(d.type));
+  t.push('','ALAMAT IP HOST (Desktop > IP Configuration)');
+  if(!hs.length)t.push('(tidak ada PC/laptop/server/printer)');
+  else{const w3=[Math.max(8,...hs.map(d=>d.name.length)),16,16,16,16];t.push(row(['Nama','IP address','Subnet mask','Gateway','DNS'],w3),row(['----','----------','-----------','-------','---'],w3));for(const d of hs)t.push(row([d.name,d.host.ip||'-',d.host.mask||'-',d.host.gw||'-',d.host.dns||'-'],w3))}
+  const sv=D.filter(d=>d.type==='server'&&d.http);
+  if(sv.length){t.push('','LAYANAN WEB SERVER (Services > HTTP)');for(const d of sv)t.push(d.name+': HTTP '+(d.http.on?'On':'Off')+'. Isi halaman (index.html): '+String(d.http.page).replace(/\s*\n\s*/g,' '))}
+  const aps=D.filter(d=>d.type==='ap');
+  if(aps.length){t.push('','ACCESS POINT (Config > Port 1 > SSID)');for(const d of aps)t.push(d.name+': SSID '+d.ssid)}
+  const lp=D.filter(d=>d.type==='laptop');
+  if(lp.length)t.push('','CATATAN LAPTOP: bila port yang dibutuhkan tidak ada (FastEthernet0 untuk kabel atau Wireless0 untuk Wi-Fi), matikan laptop, lalu ganti modul: PT-LAPTOP-NM-1CFE (kabel) atau PT-LAPTOP-NM-1W (nirkabel).');
+  if(D.some(d=>d.type!=='pc'&&Lk.some(l=>l.cable==='fiber'&&(l.a.dev===d.id||l.b.dev===d.id))))t.push('','CATATAN FIBER: pada model 2960-24TT dan 2911 port Gi0/2 berupa tembaga. Untuk fiber sungguhan tambahkan modul SFP/fiber yang sesuai.');
+  let any=false;
+  for(const d of D){
+    const c=iosCfg(d);if(!c)continue;
+    if(!any){t.push('','SKRIP CLI (tempel di tab CLI masing-masing perangkat)');any=true}
+    t.push('','!------- '+d.name+' ('+PTMODEL[d.type]+') -------',...c);
+  }
+  if(!any)t.push('','(tidak ada switch atau router, jadi tidak ada skrip CLI)');
+  t.push('','!------- akhir paket -------');
+  return t.join('\r\n');
+}
+function openSave(){
+  let pn='';try{pn=localStorage.getItem(PNKEY)||''}catch(e){}
+  showDlg(dlgShell('Simpan proyek desain jaringan','<div class="fld"><label for="pj-name">Nama proyek</label><input id="pj-name" maxlength="40" placeholder="Contoh: Jaringan Lab TJKT" value="'+esc(pn)+'" autocomplete="off"></div>'
+   +'<div class="card"><h3>1. Berkas proyek SIMNET (.json)</h3><p class="small muted">Menyimpan seluruh topologi dan konfigurasi. Buka kembali kapan saja lewat tombol Muat, lalu Buka berkas.</p><button class="btn pri" data-g="pjjson">Simpan berkas .json</button></div>'
+   +'<div class="card"><h3>2. Paket untuk Cisco Packet Tracer (.txt)</h3><p class="small muted">Daftar perangkat dan model, kabel dan port, tabel IP, serta skrip CLI siap tempel. Aplikasi web tidak dapat membuat berkas .pkt asli, jadi rancangan dibangun ulang di Packet Tracer mengikuti paket ini.</p><div class="row"><button class="btn pri" data-g="pjpt">Simpan paket Packet Tracer</button><button class="btn" data-g="pjview">Lihat dan salin teks</button></div></div>'
+   +'<p class="small muted" id="pj-msg" style="margin:0" role="status"></p>'),true);
+}
+function pjMsg(m){const e=$('#pj-msg');if(e)e.textContent=m}
+function loadFromText(txt){
+  let o;try{o=JSON.parse(txt)}catch(e){return{ok:false,msg:'Berkas bukan JSON yang valid.'}}
+  if(o&&o.format==='tjkt-asesmen-v1'&&o.proyek)o=o.proyek;
+  return loadObj(o);
+}
+function pjBind(){
+  $('#dlg').addEventListener('click',e=>{
+    const t=e.target.closest('[data-g]');if(!t)return;const g=t.dataset.g;
+    if(g==='pjjson'){const n=pjName();saveAny('Proyek_'+slug(n)+'_'+pjStamp()+'.json',serialize(),'application/json');UI.exported=true;pjMsg('Berkas .json diminta disimpan.')}
+    else if(g==='pjpt'){const n=pjName();saveAny('PacketTracer_'+slug(n)+'_'+pjStamp()+'.txt','﻿'+ptPackage(n),'text/plain;charset=utf-8');UI.exported=true;pjMsg('Paket Packet Tracer diminta disimpan.')}
+    else if(g==='pjview'){const n=pjName();showDlg(dlgShell('Paket Packet Tracer','<p class="small muted">Salin seluruh teks, atau salin bagian skrip CLI saja untuk ditempel di CLI Packet Tracer.</p><textarea id="iotxt" rows="16" readonly style="white-space:pre">'+esc(ptPackage(n))+'</textarea><div class="row"><button class="btn pri" data-g="copytxt">Salin ke papan klip</button><button class="btn" data-g="pjback">Kembali</button></div>'),true)}
+    else if(g==='pjback')openSave();
+    else if(g==='pjfile'){const f=$('#prj-file');if(f)f.click()}
+  });
+  $('#dlg').addEventListener('change',async e=>{
+    if(e.target.id!=='prj-file')return;
+    const fl=e.target.files&&e.target.files[0];e.target.value='';if(!fl)return;
+    if(typeof asesActive==='function'&&asesActive()){toast('Selama asesmen berjalan, memuat proyek dikunci.','warn');return}
+    let txt;try{txt=await fl.text()}catch(x){toast('Berkas tidak bisa dibaca.','bad');return}
+    pushUndo();const r=loadFromText(txt);
+    if(!r.ok){RT.undo.pop();toast(r.msg,'bad');return}
+    closeDlg();UI.sel=null;afterChange();fitView();toast('Proyek dimuat dari berkas.','good');
+  });
+  const b=$('#b-save');if(b)b.onclick=openSave;
+}
 /* ---------- penghubung ---------- */
 function cbBind(){
+  pjBind();
   $('#gate').addEventListener('click',e=>{
     const t=e.target.closest('[data-gt]');if(t){renderGate(t.dataset.gt,'');return}
-    const g=e.target.closest('[data-gate]');if(g){const k=g.dataset.gate;k==='siswa'?gateSiswa():k==='guru'?gateGuru():k==='tata'?tataMulai():tataKembali()}
+    const g=e.target.closest('[data-gate]');if(g){const k=g.dataset.gate;k==='siswa'?gateSiswa():k==='guru'?gateGuru():k==='lesson'?enterLesson():k==='tata'?tataMulai():tataKembali()}
   });
-  $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();if(CB.tata)return tataMulai();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
+  $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();if(CB.tata)return tataMulai();CB.gateTab==='siswa'?gateSiswa():CB.gateTab==='lesson'?enterLesson():gateGuru()}});
   $('#gate').addEventListener('input',e=>{if(['gt-nama','gt-kelas','gt-nis','gt-token'].includes(e.target.id)){const pos=e.target.selectionStart;e.target.value=e.target.value.toUpperCase();try{e.target.setSelectionRange(pos,pos)}catch(err){}}});
   $('#dlg').addEventListener('click',async e=>{
     const t=e.target.closest('[data-g]');if(!t)return;
@@ -3791,7 +3956,10 @@ function cbtInit(){
     ROLE='siswa';applyRole();startBeat();
     if(AS.phase==='idle'){AS.rules=false;renderTata();beat();return}
     hideGate();if(AS.phase==='run')hardenOn();cbLog('Halaman dimuat ulang',false);beat();cbOverlay();
-  }else showGate()
+  }else{
+    let lm=false;try{lm=localStorage.getItem(LMODE)==='1'}catch(e){}
+    if(lm)enterLesson();else showGate()
+  }
 }
 
 /* ---------- alarm, getar, dan efek api menjelang waktu habis ---------- */
