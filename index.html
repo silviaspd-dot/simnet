@@ -1518,8 +1518,15 @@ function sendPDU(aId,bId){
   const res=pingOnce(a.id,ip,true);
   logEvent(a.id,ip,res,b.name+' ('+ip+')');
   if(typeof notePing==='function')notePing(res.ok);
-  UI.tab='sim';markTabs();renderPanel();
-  toast(res.ok?'Berhasil: '+a.name+' → '+b.name:'Gagal: '+a.name+' → '+b.name+'. Lihat penjelasan di tab Simulasi.',res.ok?'good':'bad');
+  const isSiswa = (typeof ROLE!=='undefined' && ROLE==='siswa');
+  if(!isSiswa){
+    UI.tab='sim';markTabs();
+  }else{
+    UI.tab='ases';
+  }
+  renderPanel();
+  const detailStep = res.ok ? '' : (' — ' + (describe(a.id,ip,res).slice(-1)[0]?.txt || 'Periksa konfigurasi jaringan.'));
+  toast((res.ok?'Berhasil: '+a.name+' → '+b.name:'Gagal: '+a.name+' → '+b.name + detailStep),res.ok?'good':'bad');
   const ids=res.f.path.concat(res.ok&&res.b?res.b.path.slice(1):[]);
   if(UI.view==='2d')animatePath(ids,res.ok,res.f.ok?null:(res.f.where||a.id));
   else if(window.animate3D)animate3D(ids,res.ok);
@@ -1785,6 +1792,7 @@ function markTabs(){$$('#tabs button').forEach(b=>b.classList.toggle('on',b.data
 let lastTab='';
 function renderPanel(){
   const p=$('#panel');if(!p)return;
+  if(typeof ROLE!=='undefined'&&ROLE==='siswa'&&UI.tab!=='ases'){UI.tab='ases';markTabs();}
   const f={act:typeof panelAct==='function'?panelAct:()=>'',flow:typeof panelFlow==='function'?panelFlow:()=>'',info:typeof panelInfo==='function'?panelInfo:()=>'',sim:panelSim,ases:typeof panelAses==='function'?panelAses:()=>'',guru:typeof panelGuru==='function'?panelGuru:()=>''}[UI.tab];
   const st=lastTab===UI.tab?p.scrollTop:0;
   const focused=document.activeElement&&p.contains(document.activeElement)&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
@@ -1792,12 +1800,14 @@ function renderPanel(){
   p.innerHTML=f();p.scrollTop=st;lastTab=UI.tab;
 }
 function panelSim(){
-  let h='<div class="card"><h3>Simulasi paket</h3><p class="small muted">Pilih alat <b>Kirim PDU</b>, klik perangkat pengirim lalu perangkat tujuan. Paket ping bergerak di kanvas dan setiap langkahnya dijelaskan di sini. Ping dari Command Prompt dan CLI juga dicatat.</p><div class="row"><button class="btn sm pri" data-act="pdutool">✉ Kirim PDU</button><button class="btn sm" data-act="clearev">Hapus riwayat</button></div></div>';
+  const backBtn = (typeof ROLE!=='undefined' && ROLE==='siswa')
+    ? '<button class="btn sm pri" data-act="backtoases">← Kembali ke Soal</button>'
+    : '';
+  let h='<div class="card"><h3>Simulasi paket</h3><p class="small muted">Pilih alat <b>Kirim PDU</b>, klik perangkat pengirim lalu perangkat tujuan. Paket ping bergerak di kanvas dan setiap langkahnya dijelaskan di sini. Ping dari Command Prompt dan CLI juga dicatat.</p><div class="row">'+backBtn+'<button class="btn sm" data-act="pdutool">✉ Kirim PDU</button><button class="btn sm" data-act="clearev">Hapus riwayat</button></div></div>';
   if(!UI.events.length)return h+'<p class="muted small">Belum ada paket dikirim.</p>';
   return h+'<div class="ev">'+UI.events.map(e=>'<div class="e '+(e.ok?'ok':'bad')+'"><b>'+(e.ok?'Berhasil':'Gagal')+'</b> · '+esc(e.from)+' → '+esc(e.to)+' <span class="muted">'+esc(e.t)+'</span><ol>'+e.steps.map(s=>'<li class="'+(s.ok?'':'x')+'">'+esc(s.txt)+'</li>').join('')+'</ol></div>').join('')+'</div>';
 }
-PA.pdutool=()=>setTool('pdu');
-PA.clearev=()=>{UI.events=[];renderPanel()};
+PA.backtoases=()=>{UI.tab='ases';markTabs();renderPanel()};
 function selCard(){
   if(!UI.sel)return '<div class="card"><h3>Belum ada yang dipilih</h3><p class="small muted">Klik perangkat atau kabel di kanvas untuk melihat detail dan penjelasannya di sini.</p></div>';
   if(UI.sel.kind==='dev'){
@@ -3300,16 +3310,18 @@ function tataKembali(){asReset();saveAses();showGate('Anda keluar dari sesi. Mas
 function hideGate(){CB.tata=false;$('#gate').style.alignItems='';$('#gate').hidden=true;document.body.classList.remove('gate-on');requestAnimationFrame(()=>{try{fitView()}catch(e){}})}
 function renderGate(tab,msg){
   CB.gateTab=tab;
+  const uStyle='font:600 16px var(--ff-mono);letter-spacing:.1em;text-transform:uppercase';
+  const tokStyle='font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase';
   let f;
-  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="font:600 20px var(--ff-mono);letter-spacing:.2em;text-transform:uppercase"></div><button class="btn pri" data-gate="siswa" id="gt-go">Mulai Asesmen</button>';
-  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric"></div><button class="btn pri" data-gate="guru" id="gt-go">Login</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
+  if(tab==='siswa')f='<div class="g2"><div class="fld"><label for="gt-nama">Nama lengkap</label><input id="gt-nama" maxlength="60" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div><div class="fld"><label for="gt-kelas">Kelas</label><input id="gt-kelas" maxlength="20" placeholder="X TJKT 1" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div></div><div class="g2"><div class="fld"><label for="gt-absen">Nomor absen</label><input id="gt-absen" type="number" min="1" max="99" inputmode="numeric" style="'+uStyle+'"></div><div class="fld"><label for="gt-nis">NIS (bila diminta)</label><input id="gt-nis" maxlength="20" autocomplete="off" autocapitalize="characters" style="'+uStyle+'"></div></div><div class="fld"><label for="gt-token">Token dari guru</label><input id="gt-token" maxlength="10" autocomplete="off" autocapitalize="characters" style="'+tokStyle+'"></div><button class="btn pri" data-gate="siswa" id="gt-go">Mulai Asesmen</button>';
+  else f='<div class="fld"><label for="gt-pin">PIN guru</label><input id="gt-pin" type="password" autocomplete="off" maxlength="30" inputmode="numeric" style="'+tokStyle+'"></div><button class="btn pri" data-gate="guru" id="gt-go">Login</button><p class="small muted">Guru lain yang perlu akses meminta PIN kepada guru admin.</p>';
   $('#gate').innerHTML='<div class="gcard"><div class="gh"><b style="font:700 20px var(--ff-head)">SIMNET</b><div class="small muted">Asesmen praktik PjBL</div></div><div class="gtabs"><button data-gt="siswa" class="'+(tab==='siswa'?'on':'')+'">Siswa</button><button data-gt="guru" class="'+(tab==='guru'?'on':'')+'">Guru</button></div><div class="gb">'+f+'<p class="small" id="gt-err" style="color:var(--bad);margin:4px 0;min-height:1.2em" role="alert">'+esc(msg||'')+'</p></div></div>';
   const first1=$('#gt-nama')||$('#gt-pin');if(first1&&!/Mobi|Android/i.test(navigator.userAgent))first1.focus();
 }
 const gerr=m=>{const e=$('#gt-err');if(e)e.textContent=m};
 async function gateSiswa(){
-  const v=id=>(($('#'+id)||{}).value||'').trim();
-  const nama=v('gt-nama'),kelas=v('gt-kelas').toUpperCase(),absen=parseInt(v('gt-absen')),nis=v('gt-nis'),token=v('gt-token').toUpperCase();
+  const v=id=>(($('#'+id)||{}).value||'').trim().replace(/\s+/g,' ');
+  const nama=v('gt-nama').toUpperCase(),kelas=v('gt-kelas').toUpperCase(),absen=parseInt(v('gt-absen'),10),nis=v('gt-nis').toUpperCase(),token=v('gt-token').toUpperCase();
   if(nama.length<3)return gerr(ERRM.nama_tidak_valid);
   if(!kelas)return gerr(ERRM.kelas_tidak_valid);
   if(!(absen>=1&&absen<=99))return gerr(ERRM.absen_tidak_valid);
@@ -3694,7 +3706,13 @@ function cbBind(){
     const g=e.target.closest('[data-gate]');if(g){const k=g.dataset.gate;k==='siswa'?gateSiswa():k==='guru'?gateGuru():k==='tata'?tataMulai():tataKembali()}
   });
   $('#gate').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();if(CB.tata)return tataMulai();CB.gateTab==='siswa'?gateSiswa():gateGuru()}});
-  $('#gate').addEventListener('input',e=>{if(e.target.id==='gt-token'||e.target.id==='gt-kelas')e.target.value=e.target.value.toUpperCase()});
+  $('#gate').addEventListener('input',e=>{
+    if(['gt-nama','gt-kelas','gt-nis','gt-token'].includes(e.target.id)){
+      const pos=e.target.selectionStart;
+      e.target.value=e.target.value.toUpperCase();
+      try{e.target.setSelectionRange(pos,pos)}catch(err){}
+    }
+  });
   $('#dlg').addEventListener('click',async e=>{
     const t=e.target.closest('[data-g]');if(!t)return;
     if(t.dataset.g==='nilaisimpan'){
