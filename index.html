@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>
-/* Layout: lab bench. Panel kiri, kanvas topologi tengah, panel belajar kanan. Aksen kobalt hanya untuk aksi; hijau/merah/kuning khusus status link. */
+/* Layout: lab bench. Palet kiri, kanvas topologi tengah, panel belajar kanan. Aksen kobalt hanya untuk aksi; hijau/merah/kuning khusus status link. */
 :root{
   --bg:#e9edf3;--surface:#ffffff;--surface2:#f3f5f9;--ink:#13202f;--muted:#566578;--line:#ccd4df;
   --accent:#2457d6;--accent-ink:#ffffff;--accent-soft:#dde7fb;
@@ -1408,7 +1408,7 @@ function updateHint(){
     const l=S.links.find(x=>x.id===UI.sel.id);
     if(l)h='Kabel dipilih: <b>'+CABLES[l.cable].label+'</b> <button class="btn sm" data-h="plug">'+(l.plugged===false?'Colok kembali':'Cabut')+'</button> <button class="btn sm bad" data-h="rm">Hapus kabel</button>';
   }
-  if(!h)h=S.devices.length?'Geser perangkat untuk memindah. Ketuk dua kali perangkat untuk membuka konfigurasi, port, dan CLI.':'Mulai: klik perangkat di panel kiri untuk menambahkannya ke kanvas, atau pilih sebuah aktivitas di panel kanan.';
+  if(!h)h=S.devices.length?'Geser perangkat untuk memindah. Ketuk dua kali perangkat untuk membuka konfigurasi, port, dan CLI.':'Mulai: klik perangkat di palet kiri untuk menambahkannya ke kanvas, atau pilih sebuah aktivitas di panel kanan.';
   el.innerHTML=h;
 }
 function select(kind,id){UI.sel=id?{kind,id}:null;render2D();updateHint();if(UI.tab==='info')renderPanel();if(UI.view==='3d'&&(typeof V3!=='undefined'&&V3.ok))sync3D()}
@@ -2018,21 +2018,21 @@ const ACTS=[
 {id:'a1',lv:0,title:'Hubungkan dua PC',goal:'Buat jaringan terkecil: dua PC yang saling ping.',concept:'Kabel crossover untuk perangkat sejenis. Alamat IP harus satu subnet.',
  starter:{dev:[{k:'a',t:'pc',n:'PC0',x:100,y:150},{k:'b',t:'pc',n:'PC1',x:400,y:150}]},
  items:[
- {t:'Letakkan 2 PC di kanvas',how:'Klik ikon PC di panel kiri dua kali, atau seret ikonnya ke kanvas.',tip:'Tombol Siapkan perangkat akan meletakkannya untuk Anda.',rec:{devices:['pc']},ok:()=>byT('pc').length>=2},
- {t:'Sambungkan kedua PC dengan kabel Crossover',how:'Pilih Crossover di panel, klik PC pertama lalu pilih FastEthernet0, kemudian klik PC kedua dan pilih FastEthernet0.',tip:'PC dan PC itu sejenis, jadi butuh Crossover. Lampu link di kedua ujung harus hijau.',rec:{cables:['cross']},ok:()=>S.links.some(l=>l.cable==='cross'&&linkUp(l)&&dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='pc')},
+ {t:'Letakkan 2 PC di kanvas',how:'Klik ikon PC di palet kiri dua kali, atau seret ikonnya ke kanvas.',tip:'Tombol Siapkan perangkat akan meletakkannya untuk Anda.',rec:{devices:['pc']},ok:()=>byT('pc').length>=2},
+ {t:'Sambungkan kedua PC dengan kabel Crossover',how:'Pilih Crossover di palet, klik PC pertama lalu pilih FastEthernet0, kemudian klik PC kedua dan pilih FastEthernet0.',tip:'PC dan PC itu sejenis, jadi butuh Crossover. Lampu link di kedua ujung harus hijau.',rec:{cables:['cross']},ok:()=>S.links.some(l=>l.cable==='cross'&&linkUp(l)&&dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='pc')},
  {t:'Beri IP 192.168.1.10 dan 192.168.1.11, mask 255.255.255.0',how:'Ketuk dua kali PC, buka tab Konfigurasi, isi IP address dan Subnet mask. Gateway boleh kosong.',tip:'Tiga angka pertama kedua IP harus sama (satu subnet), angka terakhir harus berbeda.',ok:()=>sameSubnetAll(byT('pc').filter(ipOK).slice(0,2))&&byT('pc').filter(ipOK).length>=2},
  {t:'Uji koneksi dengan ping',how:'Pakai alat Kirim PDU: klik PC pertama lalu PC kedua. Atau buka Desktop, Command Prompt, ketik ping 192.168.1.11.',tip:'Jika gagal, periksa lampu link dan pastikan kedua IP sudah tersimpan.',ok:()=>{const p=byT('pc');return p.length>=2&&canPing(p[0].id,p[1].id)&&P.cur.pings>0}}]},
 {id:'a2',lv:0,title:'Satu LAN dengan switch',goal:'Hubungkan tiga PC lewat switch dan buktikan semuanya saling terjangkau.',concept:'Switch menghubungkan perangkat dalam satu jaringan lokal. PC ke switch memakai kabel straight-through.',
  starter:{dev:[{k:'s',t:'switch',n:'Switch0',x:225,y:60},{k:'a',t:'pc',n:'PC0',x:50,y:230},{k:'b',t:'pc',n:'PC1',x:225,y:230},{k:'c',t:'pc',n:'PC2',x:400,y:230}]},
  items:[
- {t:'Letakkan 1 switch dan 3 PC',how:'Klik Switch sekali, lalu PC tiga kali di panel kiri.',tip:'Gunakan Siapkan perangkat jika ingin langsung mulai dari kabel.',rec:{devices:['switch','pc']},ok:()=>byT('switch').length>=1&&byT('pc').length>=3},
+ {t:'Letakkan 1 switch dan 3 PC',how:'Klik Switch sekali, lalu PC tiga kali di palet kiri.',tip:'Gunakan Siapkan perangkat jika ingin langsung mulai dari kabel.',rec:{devices:['switch','pc']},ok:()=>byT('switch').length>=1&&byT('pc').length>=3},
  {t:'Sambungkan tiap PC ke switch dengan Straight-through',how:'Pilih Straight-through, klik PC, pilih FastEthernet0, klik Switch, pilih port FastEthernet0/1. Ulangi untuk PC lain (port 2 dan 3).',tip:'PC dan switch berbeda jenis, jadi pakai Straight-through. Tiga lampu hijau tanda sukses.',rec:{cables:['straight']},ok:()=>S.links.filter(l=>linkUp(l)&&l.cable==='straight'&&((dev(l.a.dev).type==='pc'&&dev(l.b.dev).type==='switch')||(dev(l.b.dev).type==='pc'&&dev(l.a.dev).type==='switch'))).length>=3},
  {t:'Beri tiga PC IP satu subnet (mis. 192.168.1.10, .11, .12 / 255.255.255.0)',how:'Buka tiap PC, tab Konfigurasi, isi IP dan mask. IP tidak boleh sama.',tip:'Dua PC dengan IP yang sama membuat konflik. Ubah angka terakhir.',ok:()=>sameSubnetAll(byT('pc').filter(ipOK))&&byT('pc').filter(ipOK).length>=3},
  {t:'Ping dari satu PC ke PC lain berhasil',how:'Kirim PDU dari PC0 ke PC2, atau ping dari Command Prompt.',tip:'Jika gagal, lihat tab Simulasi untuk melihat di langkah mana paket berhenti.',ok:()=>{const p=byT('pc');return p.length>=3&&p.some(a=>p.some(b=>a!==b&&canPing(a.id,b.id)))&&P.cur.pings>0}}]},
 {id:'a3',lv:1,title:'Atur switch lewat kabel console',goal:'Hubungkan PC ke port Console switch, ganti hostname, dan beri IP manajemen.',concept:'Kabel console (rollover) dipakai untuk konfigurasi awal tanpa jaringan.',
  starter:{dev:[{k:'p',t:'pc',n:'PC0',x:100,y:150},{k:'s',t:'switch',n:'Switch0',x:380,y:150}]},
  items:[
- {t:'Letakkan 1 PC dan 1 switch',how:'Klik PC dan Switch di panel.',tip:'Gunakan Siapkan perangkat.',rec:{devices:['pc','switch']},ok:()=>byT('pc').length>=1&&byT('switch').length>=1},
+ {t:'Letakkan 1 PC dan 1 switch',how:'Klik PC dan Switch di palet.',tip:'Gunakan Siapkan perangkat.',rec:{devices:['pc','switch']},ok:()=>byT('pc').length>=1&&byT('switch').length>=1},
  {t:'Pasang kabel Console dari RS232 PC ke Console switch',how:'Pilih Console, klik PC dan pilih RS232, klik switch dan pilih Console.',tip:'Kabel console hanya cocok dengan port RS232 dan Console. Port Ethernet menolaknya.',rec:{cables:['console']},ok:()=>between('pc','switch',l=>l.cable==='console'&&l.plugged!==false)},
  {t:'Buka Desktop, Terminal dan ubah hostname menjadi SW-LAB',how:'Ketuk dua kali PC, tab Desktop, pilih Terminal. Ketik: enable, configure terminal, hostname SW-LAB.',tip:'Prompt akan berubah menjadi SW-LAB(config)#.',ok:()=>byT('switch').some(d=>d.name==='SW-LAB')},
  {t:'Beri interface vlan 1 alamat 192.168.1.2/24 dan nyalakan',how:'Di terminal: interface vlan 1, ip address 192.168.1.2 255.255.255.0, no shutdown, lalu end.',tip:'Switch bekerja di Layer 2, jadi alamat IP dipasang di interface VLAN 1 (SVI).',ok:()=>byT('switch').some(d=>ip2n(d.svi.ip)!==null&&maskOK(d.svi.mask)&&!d.svi.shut)}]},
@@ -2084,7 +2084,7 @@ const ACTS=[
  {t:'PC0 berhasil ping PC3',how:'Kirim PDU dari PC0 ke PC3.',tip:'Jika masih gagal, buka tab Simulasi untuk melihat langkah yang gagal.',ok:()=>{const a=refD('p0'),b=refD('p3');return !!a&&!!b&&canPing(a.id,b.id)&&P.cur.pings>0}}]},
 {id:'a10',lv:2,title:'Rancang jaringan lab komputer',goal:'Rancang sendiri jaringan lab: satu router, dua switch, enam PC, dan satu server. Semua PC harus bisa mengakses server.',concept:'Mendesain topologi, rencana IP, dan konfigurasi dari nol tanpa langkah rinci.',
  items:[
- {t:'Perangkat: 1 router, 2 switch, 6 PC, 1 server',how:'Tambahkan dari panel.',tip:'Hitung jumlah tiap perangkat di kanvas.',rec:{devices:['router','switch','pc','server']},ok:()=>byT('router').length>=1&&byT('switch').length>=2&&byT('pc').length>=6&&byT('server').length>=1},
+ {t:'Perangkat: 1 router, 2 switch, 6 PC, 1 server',how:'Tambahkan dari palet.',tip:'Hitung jumlah tiap perangkat di kanvas.',rec:{devices:['router','switch','pc','server']},ok:()=>byT('router').length>=1&&byT('switch').length>=2&&byT('pc').length>=6&&byT('server').length>=1},
  {t:'Semua kabel terpasang dan semua link hijau',how:'PC dan server ke switch, switch ke router. Straight-through.',tip:'Link router hijau setelah interface dinyalakan.',ok:()=>S.links.length>=9&&allUp()&&countBetween('router','switch')>=1},
  {t:'Semua PC dan server punya IP, mask, dan gateway yang benar',how:'Rancang rencana IP dulu (tab Alur kerja). Gunakan satu atau dua subnet.',tip:'Gateway diisi bila tujuan berada di subnet lain.',ok:()=>hostsAll().length>=7&&hostsAll().every(h=>ipOK(h)&&(gwMatches(h)||ip2n(h.host.gw)===null))},
  {t:'Setiap PC berhasil ping server',how:'Kirim PDU dari tiap PC ke server.',tip:'Gunakan Diagnosa otomatis di tab Alur kerja untuk mencari masalahnya.',ok:()=>{const v=byT('server')[0];const p=byT('pc');return !!v&&p.length>=6&&p.every(x=>canPing(x.id,v.id))&&P.cur.pings>0}}]},
@@ -2247,8 +2247,8 @@ function flowSteps(){
   const conf=hs.length>0&&hs.every(ipOK)&&rs.every(r=>ifUpWithIp(r).length>0);
   return[
    {t:'Rancang',d:'Tentukan tujuan jaringan, daftar perangkat, dan rencana IP (subnet, gateway). Gambar topologi di kertas atau pada kanvas ini.',tool:'Tabel alamat IP di bawah dan kalkulator subnet di tab Info.',ok:n>0},
-   {t:'Pasang perangkat',d:'Letakkan PC, server, switch, router, dan access point sesuai rancangan. Beri nama yang jelas.',tool:'Panel perangkat di kiri. Ubah nama lewat tab Konfigurasi.',ok:n>=2},
-   {t:'Pasang kabel',d:'Pilih jenis kabel sesuai perangkat dan port. Pastikan semua lampu link hijau.',tool:'Panel kabel. Cabut atau colok kembali lewat tab Fisik.',ok:linked&&allUp()},
+   {t:'Pasang perangkat',d:'Letakkan PC, server, switch, router, dan access point sesuai rancangan. Beri nama yang jelas.',tool:'Palet perangkat di kiri. Ubah nama lewat tab Konfigurasi.',ok:n>=2},
+   {t:'Pasang kabel',d:'Pilih jenis kabel sesuai perangkat dan port. Pastikan semua lampu link hijau.',tool:'Palet kabel. Cabut atau colok kembali lewat tab Fisik.',ok:linked&&allUp()},
    {t:'Konfigurasi',d:'Isi IP, mask, gateway. Nyalakan interface router, buat VLAN dan rute bila perlu.',tool:'Tab Konfigurasi dan CLI pada tiap perangkat.',ok:conf},
    {t:'Uji',d:'Ping dari dekat ke jauh: gateway dulu, lalu perangkat di subnet lain. Pakai tracert untuk melihat jalur.',tool:'Kirim PDU atau Command Prompt. Penjelasan ada di tab Simulasi.',ok:!!UI.pinged},
    {t:'Dokumentasi dan perbaikan',d:'Simpan proyek, catat rencana IP, dan perbaiki masalah yang ditemukan diagnosa.',tool:'Tombol Salin proyek di atas. Diagnosa otomatis di bawah.',ok:!!UI.exported}
@@ -2626,12 +2626,13 @@ function asValidate(){
   return '';
 }
 PA.asstart=()=>{
+  if(AS.phase==='run'&&Date.now()-(AS._t0||0)<4000)return;
   AS.err=asValidate();
   if(AS.err){renderPanel();return}
   AS.id.nama=String(AS.id.nama).trim();AS.id.nis=String(AS.id.nis).trim();AS.id.kelas=String(AS.id.kelas).trim();AS.id.absen=parseInt(AS.id.absen);AS.id.durasi=parseInt(AS.id.durasi);AS.id.aturanAt=Date.now();
   pushUndo();resetState();S.settings.strict=true;
   P.cur=null;saveProfile();UI.sel=null;UI.events=[];UI.diag=null;
-  AS.rules=false;AS.phase='run';AS.start=Date.now();AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
+  AS._t0=Date.now();AS.rules=false;AS.phase='run';AS.start=Date.now();AS.end=0;AS.checks=0;AS.lastCheck=null;AS.tests=[];AS.webBy=[];AS.agree=false;AS.result=null;AS.over=false;AS.saved={pdf:false,json:false};AS.err='';
   for(const k of Object.keys(AS.notes))AS.notes[k]='';
   saveAses();UI.tab='ases';markTabs();afterChange();asesTick();
   requestAnimationFrame(()=>fitView());
@@ -3076,7 +3077,7 @@ function gpDialog(){
       try{o=JSON.parse($('#gp-json').value)}catch(x){err.textContent='Teks bukan JSON yang valid.';return}
       if(!o||typeof o!=='object'){err.textContent='Isi pengaturan tidak sesuai.';return}
       for(const k of Object.keys(GP_DEF))if(k!=='pin'&&o[k]!=null&&typeof o[k]===typeof GP_DEF[k])GP[k]=o[k];
-      GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,30,180);
+      GP.maxCek=clamp(+GP.maxCek||0,0,10);GP.durasi=clamp(+GP.durasi||90,10,300);
       saveGP();closeDlg();applyRole();toast('Pengaturan diterapkan.','good');
     }
   });
@@ -3156,7 +3157,7 @@ function cbtEngine(S,fn,a,now,rid){
     else if(t==='pesan'){if(String(d.teks==null?'':d.teks).trim().length===0)E('pesan_kosong');
       sel.filter(p=>p.hasil==null).forEach(p=>{p.pesan.push({id:p.pesan.length+1,t:now,teks:String(d.teks).slice(0,300)});n++})}
     else if(t==='akhiri'){sel.filter(p=>p.hasil==null).forEach(p=>{p.paksa_akhir=true;n++})}
-    else if(t==='reset'){if(a.p_pid==null)E('pid_wajib');const k=S.peserta.length;S.peserta=S.peserta.filter(p=>!(p.sesi_id===a.p_sesi&&p.id===a.p_pid));n=k-S.peserta.length}
+    else if(t==='reset'){if(a.p_pid==null)E('pid_wajib');const q=S.peserta.find(p=>p.sesi_id===a.p_sesi&&p.id===a.p_pid);if(q){q.secret=id()+id();q.reset_login=true;n=1}}
     else E('aksi_tidak_dikenal');
     return{n}}
   case 'guru_detail':{guru();const p=S.peserta.find(x=>x.id===a.p_pid);if(!p)E('peserta_tidak_ada');
@@ -3180,6 +3181,11 @@ function cbtEngine(S,fn,a,now,rid){
     const p=S.peserta.find(x=>x.sesi_id===s.id&&x.kelas===kl&&x.absen===ab);
     if(p){
       if(a.p_rid!=null&&a.p_rid===p.secret){p.terakhir=now;return{pid:p.id,secret:p.secret,policy:s.policy,judul:s.judul,sesi_id:s.id,masuk:p.masuk,server_ms:now,lanjut:true}}
+      if(p.reset_login){
+        const sec2=(typeof a.p_rid==='string'&&/^[0-9a-f]{32,128}$/.test(a.p_rid))?a.p_rid:id()+id();
+        p.secret=sec2;p.reset_login=false;p.terakhir=now;
+        return{pid:p.id,secret:sec2,policy:s.policy,judul:s.judul,sesi_id:s.id,masuk:p.masuk,server_ms:now,lanjut:true,reset:true,
+          viol:Math.max(0,int(p.state.viol,0)),viol_dasar:p.viol_dasar||0,tambah_menit:p.tambah_menit||0,sisa:p.state.phase==='run'?Math.max(0,int(p.state.sisa,0)):null}}
       E('sudah_masuk');
     }
     if(s.status==='tutup')E('sesi_tutup');
@@ -3356,13 +3362,15 @@ async function gateSiswa(){
     siswaMasuk(r,{nama,kelas,absen,nis},token,old&&old.secret===rid?old:null);
   }catch(e){gerr(errMsg(e.message)+((!dbRemote()&&e.message==='token_salah')?HINT_DB:''));if(btn)btn.disabled=false;if(document.fullscreenElement)try{document.exitFullscreen()}catch(x){}}
 }
+/* setelah reset login: waktu dilanjutkan dari sisa terakhir yang dilaporkan, bukan dari awal */
+function anchorSisa(){AS.id.durasi=GP.durasi+(SW.tambah||0);AS.start=Date.now()-(AS.id.durasi*60000-Math.max(0,SW.sisa)*1000);SW.reset=false}
 function siswaMasuk(r,ids,token,old){
   SW={pid:r.pid,secret:r.secret,sesi:r.sesi_id,judul:r.judul,token,ids,policy:r.policy||{},lastMsg:old?old.lastMsg||0:0,terkirim:old?!!old.terkirim:false};
   applyPolicy(r.policy);
   ROLE='siswa';
   const same=r.lanjut&&AS.phase!=='idle'&&AS.id.nama===ids.nama&&AS.id.kelas===ids.kelas&&String(AS.id.absen)===String(ids.absen);
-  CB.viol=old?+old.viol||0:0;CB.base=old?+old.base||0:0;
-  CB.skew=(r.server_ms||Date.now())-Date.now();SW.masuk=r.masuk||0;SW.resume=!!r.lanjut;
+  CB.viol=Math.max(old?+old.viol||0:0,+r.viol||0);CB.base=old?+old.base||0:(+r.viol_dasar||0);
+  CB.skew=(r.server_ms||Date.now())-Date.now();SW.masuk=r.masuk||0;SW.resume=!!r.lanjut;SW.reset=!!r.reset;SW.sisa=r.sisa==null?null:+r.sisa;SW.tambah=+r.tambah_menit||0;
   if(!same){
     CB.events=[];CB.auto=false;CB.lastSnap='';
     asReset();
@@ -3371,7 +3379,9 @@ function siswaMasuk(r,ids,token,old){
   }else if(AS.phase==='run'&&SW.masuk){
     const elapsed=Math.max(0,(Date.now()+(CB.skew||0))-SW.masuk);
     if(elapsed>0)AS.start=Date.now()-elapsed;
-    AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;saveAses();
+    AS.id.paket=GP.paket;AS.id.durasi=GP.durasi;
+    if(SW.reset&&SW.sisa!=null)anchorSisa();
+    saveAses();
   }
   saveSW();applyRole();startBeat();
   if(AS.phase==='idle'){AS.rules=false;renderTata();beat();return}
@@ -3380,7 +3390,7 @@ function siswaMasuk(r,ids,token,old){
 const _asstart0=PA.asstart;
 PA.asstart=()=>{
   _asstart0();
-  if(ROLE==='siswa'&&SW&&AS.phase==='run'&&SW.resume){AS.start=Date.now()-Math.max(0,(Date.now()+(CB.skew||0))-(SW.masuk||Date.now()));saveAses();asesTick()}
+  if(ROLE==='siswa'&&SW&&AS.phase==='run'&&SW.resume){AS.start=Date.now()-Math.max(0,(Date.now()+(CB.skew||0))-(SW.masuk||Date.now()));if(SW.reset&&SW.sisa!=null)anchorSisa();saveAses();asesTick()}
 };
 let GG_BUSY=false;
 async function gateGuru(){
@@ -3415,7 +3425,8 @@ async function beat(){
     else if(r.terkirim&&SW&&!SW.terkirim){SW.terkirim=true;saveSW();renderPanel()}
   }catch(e){
     const c=e&&e.message;
-    if(c==='peserta_tidak_ada'||c==='rahasia_salah'){clearSW();asReset();showGate('Sesi Anda direset guru atau tidak dikenali. Silakan masuk kembali.')}
+    if(c==='rahasia_salah'){clearSW();saveAses();showGate('Login Anda direset guru. Masuk kembali dengan data yang sama; pekerjaan, waktu, dan catatan pelanggaran dilanjutkan.')}
+    else if(c==='peserta_tidak_ada'){clearSW();asReset();showGate('Sesi Anda tidak dikenali. Silakan masuk kembali.')}
     else{CB.fails++;setOnline(false)}
   }finally{CB.busy=false}
 }
@@ -3562,6 +3573,7 @@ function monStatus(p,now){
   return p.status==='mengerjakan'?['Mengerjakan','acc']:['Menunggu','mute'];
 }
 const perlu=p=>(p.viol>=2)||!!p.terkunci;
+const nz=v=>{v=Number(v);return isFinite(v)?v:0};
 function monRender(){
   const m=$('#mon');if(!m||m.hidden)return;
   const d=MON.data,now=d?d.server_ms:Date.now(),ps=d?d.peserta:[];
@@ -3582,7 +3594,7 @@ function monRender(){
     for(const p of ps){
       const[sl,sc]=monStatus(p,now),s=p.state||{},age=Math.max(0,(now-p.terakhir)/1000);
       const sisa=p.status==='selesai'||s.sisa==null?'-':(s.phase==='run'?fmtS(s.sisa-age):'-');
-      h+='<tr data-pid="'+p.id+'"><td>'+p.absen+'</td><td><b>'+esc(p.nama)+'</b></td><td>'+esc(p.kelas)+'</td><td><span class="pill st-'+sc+'">'+sl+'</span></td><td class="mono">'+sisa+(p.tambah_menit?' <span class="muted">(+'+p.tambah_menit+')</span>':'')+'</td><td class="mono">'+(s.skor!=null?fmt1(s.skor):'-')+'</td><td class="mono">'+(p.nilai_guru?fmt1(p.nilai_guru.total):'-')+'</td><td>'+(s.cek!=null?s.cek:'-')+'</td><td style="color:'+(p.viol?'var(--bad)':'inherit')+'">'+p.viol+(perlu(p)?' <span title="Perlu ditinjau guru" aria-label="Perlu ditinjau">⚠</span>':'')+'</td><td>'+(s.dev!=null?s.dev+'/'+s.kab:'-')+'</td><td class="muted">'+(age<60?Math.round(age)+' dtk':Math.round(age/60)+' mnt')+'</td><td class="act"><button class="btn sm" data-ma="detail">Detail</button><button class="btn sm" data-ma="'+(p.terkunci?'buka':'kunci')+'">'+(p.terkunci?'Buka':'Kunci')+'</button><button class="btn sm" data-ma="tambah">+10</button><button class="btn sm" data-ma="pesan">Pesan</button>'+(p.status==='selesai'?'':'<button class="btn sm" data-ma="akhiri">Akhiri</button>')+(p.ada_hasil?'<button class="btn sm pri" data-ma="hasil">Periksa</button><button class="btn sm pri" data-ma="nilai">Nilai</button>':'')+'<button class="btn sm bad" data-ma="reset">Reset</button></td></tr>';
+      h+='<tr data-pid="'+esc(p.id)+'"><td>'+esc(p.absen)+'</td><td><b>'+esc(p.nama)+'</b></td><td>'+esc(p.kelas)+'</td><td><span class="pill st-'+sc+'">'+sl+'</span></td><td class="mono">'+sisa+(p.tambah_menit?' <span class="muted">(+'+nz(p.tambah_menit)+')</span>':'')+'</td><td class="mono">'+(s.skor!=null?fmt1(nz(s.skor)):'-')+'</td><td class="mono">'+(p.nilai_guru?fmt1(p.nilai_guru.total):'-')+'</td><td>'+(s.cek!=null?nz(s.cek):'-')+'</td><td style="color:'+(p.viol?'var(--bad)':'inherit')+'">'+nz(p.viol)+(perlu(p)?' <span title="Perlu ditinjau guru" aria-label="Perlu ditinjau">⚠</span>':'')+'</td><td>'+(s.dev!=null?nz(s.dev)+'/'+nz(s.kab):'-')+'</td><td class="muted">'+(age<60?Math.round(age)+' dtk':Math.round(age/60)+' mnt')+'</td><td class="act"><button class="btn sm" data-ma="detail">Detail</button><button class="btn sm" data-ma="'+(p.terkunci?'buka':'kunci')+'">'+(p.terkunci?'Buka':'Kunci')+'</button><button class="btn sm" data-ma="tambah">+10</button><button class="btn sm" data-ma="pesan">Pesan</button>'+(p.status==='selesai'?'':'<button class="btn sm" data-ma="akhiri">Akhiri</button>')+(p.ada_hasil?'<button class="btn sm pri" data-ma="hasil">Periksa</button><button class="btn sm pri" data-ma="nilai">Nilai</button>':'')+'<button class="btn sm bad" data-ma="reset">Reset</button></td></tr>';
     }
     h+='</tbody></table></div>';
   }else h+='<div class="card muted">Belum ada sesi. Tekan <b>+ Sesi baru</b> untuk membuat token asesmen.</div>';
@@ -3629,9 +3641,9 @@ async function monDetail(pid){
   try{
     const r=await rpc('guru_detail',{p_key:gk(),p_pid:pid}),p=r.peserta,s=p.state||{};
     const[sl]=monStatus(Object.assign({},p),r.server_ms);
-    let h='<div class="row"><span class="pill">'+sl+'</span><span class="small muted">Paket '+esc(s.paket||'-')+' · aktif '+Math.round((r.server_ms-p.terakhir)/1000)+' dtk lalu</span></div><table class="t" style="margin:8px 0"><tr><th>Nama</th><td>'+esc(p.nama)+'</td><th>Kelas / absen</th><td>'+esc(p.kelas)+' / '+p.absen+'</td></tr><tr><th>NIS</th><td>'+esc(p.nis||'-')+'</td><th>Skor otomatis</th><td>'+(s.skor!=null?fmt1(s.skor):'-')+' / 70</td></tr><tr><th>Cek mandiri</th><td>'+(s.cek!=null?s.cek:'-')+'</td><th>Pelanggaran</th><td style="color:'+(s.viol?'var(--bad)':'inherit')+'">'+(s.viol||0)+' · layar penuh: '+(s.fs?'ya':'tidak')+'</td></tr></table>';
+    let h='<div class="row"><span class="pill">'+sl+'</span><span class="small muted">Paket '+esc(s.paket||'-')+' · aktif '+Math.round((r.server_ms-p.terakhir)/1000)+' dtk lalu</span></div><table class="t" style="margin:8px 0"><tr><th>Nama</th><td>'+esc(p.nama)+'</td><th>Kelas / absen</th><td>'+esc(p.kelas)+' / '+esc(p.absen)+'</td></tr><tr><th>NIS</th><td>'+esc(p.nis||'-')+'</td><th>Skor otomatis</th><td>'+(s.skor!=null?fmt1(nz(s.skor)):'-')+' / 70 <span class="muted small">(dilaporkan perangkat siswa)</span></td></tr><tr><th>Cek mandiri</th><td>'+(s.cek!=null?nz(s.cek):'-')+'</td><th>Pelanggaran</th><td style="color:'+(s.viol?'var(--bad)':'inherit')+'">'+nz(s.viol)+' · layar penuh: '+(s.fs?'ya':'tidak')+'</td></tr></table>';
     h+='<h3 style="margin:8px 0 4px;font-size:13px">Jaringan siswa saat ini</h3>'+topoSVG(r.snap);
-    h+='<h3 style="margin:10px 0 4px;font-size:13px">Catatan pelanggaran</h3>'+((s.log&&s.log.length)?'<table class="t">'+s.log.map(e=>'<tr><td class="mono">'+esc(e.t)+'</td><td>'+esc(e.ket)+'</td><td>'+(e.n?'#'+e.n:'info')+'</td></tr>').join('')+'</table>':'<p class="small muted">Tidak ada.</p>');
+    h+='<h3 style="margin:10px 0 4px;font-size:13px">Catatan pelanggaran</h3>'+((s.log&&s.log.length)?'<table class="t">'+s.log.map(e=>'<tr><td class="mono">'+esc(e.t)+'</td><td>'+esc(e.ket)+'</td><td>'+(e.n?'#'+nz(e.n):'info')+'</td></tr>').join('')+'</table>':'<p class="small muted">Tidak ada.</p>');
     h+='<h3 style="margin:10px 0 4px;font-size:13px">Bukti uji terakhir</h3>'+((s.tests&&s.tests.length)?'<table class="t">'+s.tests.map(e=>'<tr><td class="mono">'+esc(e.t)+'</td><td>'+esc(e.dari)+' → '+esc(e.ke)+'</td><td>'+(e.ok?'Berhasil':'Gagal')+'</td></tr>').join('')+'</table>':'<p class="small muted">Belum ada.</p>');
     showDlg(dlgShell('Detail: '+esc(p.nama),h));
   }catch(e){toast(errMsg(e.message),'bad')}
@@ -3664,8 +3676,8 @@ function nlVals(){const o={};let ok=true;for(const k of NL){const el=$('#nl-'+k[
 function nlHitung(){const{o}=nlVals();let t=0;for(const k of NL)if(o[k[0]]>=0)t+=Math.min(k[2],o[k[0]]);const a=$('#nl-tot'),b=$('#nl-akhir');if(a)a.textContent=fmt1(t);if(b)b.textContent=fmt1(MON.nilaiAuto+t)}
 function monCSV(){
   const d=MON.data;if(!d)return;
-  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const rows=[['Nama','Kelas','Absen','NIS','Status','Skor otomatis (maks 70)','Pelanggaran','Cek mandiri','Terkunci','Rancangan (10)','Analisis (8)','Dokumentasi (7)','Sikap (5)','Nilai guru (maks 30)','Nilai akhir (maks 100)','Catatan guru']].concat(d.peserta.map(p=>[p.nama,p.kelas,p.absen,p.nis,p.status,p.state&&p.state.skor!=null?String(p.state.skor).replace('.',','):'',p.viol,p.state&&p.state.cek!=null?p.state.cek:'',p.terkunci?'ya':'tidak'].concat(csvNilai(p))));
+  const q=v=>{let t=String(v==null?'':v);if(/^[=+\-@\t\r]/.test(t)&&!/^-?\d+([.,]\d+)?$/.test(t))t="'"+t;return '"'+t.replace(/"/g,'""')+'"'};
+  const rows=[['Nama','Kelas','Absen','NIS','Status','Skor otomatis dilaporkan siswa (maks 70)','Pelanggaran','Cek mandiri','Terkunci','Rancangan (10)','Analisis (8)','Dokumentasi (7)','Sikap (5)','Nilai guru (maks 30)','Nilai akhir (maks 100)','Catatan guru']].concat(d.peserta.map(p=>[p.nama,p.kelas,p.absen,p.nis,p.status,p.state&&p.state.skor!=null?String(p.state.skor).replace('.',','):'',p.viol,p.state&&p.state.cek!=null?p.state.cek:'',p.terkunci?'ya':'tidak'].concat(csvNilai(p))));
   const cur=MON.sesi.find(s=>s.id===MON.cur)||{token:'sesi'};
   saveAny('Rekap_'+cur.token+'.csv','﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 }
@@ -3739,6 +3751,7 @@ PA.monopen=monOpen;
 /* ================= MODE LESSON, SIMPAN PROYEK, EKSPOR PACKET TRACER ================= */
 const LKEY='tjkt-lesson-v1',LMODE='tjkt-mode',PNKEY='tjkt-pname';
 function enterLesson(){
+  if(AS.phase==='run'&&!(AS.result||AS.over)&&!confirm('Asesmen Anda sedang berjalan dan belum dikirim. Masuk mode Belajar akan menghapusnya. Lanjutkan?'))return;
   if(AS.phase!=='idle')asReset();
   SW=null;stopBeat();hardenOff();CB.locked=false;CB.viol=0;CB.base=0;CB.tata=false;
   ROLE='belajar';cbOverlay();
@@ -3817,7 +3830,7 @@ function ptPackage(name){
   const nm=id=>dev(id).name;
   t.push('PAKET RANCANGAN JARINGAN UNTUK CISCO PACKET TRACER','Proyek   : '+name,'Dibuat   : '+new Date().toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' (SIMNET)','Isi      : '+D.length+' perangkat, '+Lk.length+' kabel','');
   t.push('CATATAN','- Berkas .pkt asli tidak dapat dibuat oleh aplikasi web, jadi paket ini berisi semua yang dibutuhkan untuk membangun ulang rancangan di Packet Tracer dalam beberapa menit.','- Packet Tracer menyimpan konfigurasi sebagai ekstensi .pkt. Setelah selesai membangun, simpan dengan File > Save.','');
-  t.push('LANGKAH','1. Buka Packet Tracer, lalu tambahkan perangkat sesuai tabel PERANGKAT (model tertera di kolom Model PT). Ubah nama (Display Name) agar sama.','2. Pasang kabel sesuai tabel KABEL. Pilih jenis kabel dan port persis seperti tertera.','3. Klik PC/Laptop/Server > Desktop > IP Configuration, isi sesuai tabel ALAMAT IP HOST. Server: Services > HTTP.','4. Klik switch/router > tab CLI, tekan Enter, lalu tempel skrip dari bagian SKRIP CLI perangkat itu (satu perangkat satu skrip).','5. Uji dengan ping (Simulation atau Command Prompt) dan periksa lampu link.','');
+  t.push('LANGKAH','1. Buka Packet Tracer, lalu tambahkan perangkat sesuai tabel PERANGKAT (model tertera di kolom Model PT). Ubah nama (Display Name) agar sama.','2. Pasang kabel sesuai tabel KABEL. Pilih jenis kabel dan port persis seperti tertera.','3. Klik PC/Laptop/Server > Desktop > IP Configuration, isi sesuai tabel ALAMAT IP HOST. Server: Services > HTTP.','4. Klik switch/router > tab CLI. Jika muncul pertanyaan "Continue with configuration dialog? [yes/no]", ketik no lalu Enter, tunggu sampai muncul prompt Router> atau Switch> (tekan Enter bila perlu). Baru tempel skrip dari bagian SKRIP CLI perangkat itu (satu perangkat satu skrip).','5. Uji dengan ping (Simulation atau Command Prompt) dan periksa lampu link.','');
   const w1=[Math.max(10,...D.map(d=>d.name.length))+0,30,16];
   t.push('PERANGKAT',row(['Nama','Model PT','Posisi (x,y)'],w1),row(['----','--------','------------'],w1));
   for(const d of D)t.push(row([d.name,PTMODEL[d.type],Math.round(d.x)+','+Math.round(d.y)],w1)+(d.power?'':'   (dimatikan)'));
@@ -3916,7 +3929,7 @@ function cbBind(){
       else if(t==='kunci'||t==='buka'||t==='akhiri')monAksi(t,pid);
       else if(t==='tambah')monAksi('tambah',pid,{menit:10});
       else if(t==='pesan'){MON.msgTo=pid;showDlg(dlgShell('Kirim pesan','<div class="fld"><label for="mon-msg">Pesan untuk siswa</label><textarea id="mon-msg" rows="4" maxlength="300"></textarea></div><div class="row" style="margin-top:8px"><button class="btn pri" data-g="monsend">Kirim</button></div>'),true)}
-      else if(t==='reset'){const nm=a.closest('tr').querySelector('b').textContent;cbConfirm('Reset login <b>'+esc(nm)+'</b>? Pekerjaannya di sesi ini dihapus dan siswa diminta masuk ulang.',()=>monAksi('reset',pid),'Ya, reset')}
+      else if(t==='reset'){const nm=a.closest('tr').querySelector('b').textContent;cbConfirm('Reset login <b>'+esc(nm)+'</b>? Data pekerjaan, sisa waktu, dan hitungan pelanggaran tetap tersimpan; siswa hanya diminta masuk ulang (misalnya ganti perangkat atau sesi macet).',()=>monAksi('reset',pid),'Ya, reset')}
       return}
     const m=e.target.closest('[data-mo]');if(!m)return;const t=m.dataset.mo;
     if(t==='close')monClose();else if(t==='new')sesiDialog();else if(t==='csv')monCSV();
